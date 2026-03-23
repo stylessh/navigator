@@ -1142,7 +1142,7 @@ extension LiveBrowserCameraCaptureController: AVCaptureVideoDataOutputSampleBuff
 						width: processedFrame.pixelWidth,
 						height: processedFrame.pixelHeight,
 						bytesPerRow: processedFrame.bytesPerRow,
-						pixelFormat: .bgra8888,
+						pixelFormat: .bgra,
 						timestampHostTime: timestampHostTime,
 						durationHostTime: durationHostTime
 					)

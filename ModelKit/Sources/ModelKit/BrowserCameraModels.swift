@@ -87,11 +87,13 @@ public enum BrowserCameraHealthState: String, Codable, CaseIterable, Sendable {
 	case degraded
 	case sourceLost
 	case pipelineFallback
+	case publisherUnavailable
 }
 
 public enum BrowserCameraOutputMode: String, Codable, CaseIterable, Sendable {
 	case directPhysicalCapture
 	case processedNavigatorFeed
+	case systemVirtualCameraPublication
 	case unavailable
 }
 
@@ -499,6 +501,170 @@ public struct BrowserCameraPerformanceMetrics: Codable, Equatable, Hashable, Sen
 	}
 }
 
+public enum BrowserCameraVirtualPublisherState: String, Codable, Sendable {
+	case notRequired
+	case idle
+	case installMissing
+	case activating
+	case starting
+	case ready
+	case degraded
+	case timedOut
+	case stopping
+	case updateRequired
+	case unavailable
+	case failed
+}
+
+public enum BrowserCameraVirtualPublisherTransportMode: String, Codable, Sendable {
+	case inProcess
+	case sharedMemory
+	case copiedFrames
+}
+
+public enum BrowserCameraVirtualPublisherPixelFormat: String, Codable, Sendable {
+	case bgra8888
+}
+
+public enum BrowserCameraVirtualPublisherBackpressurePolicy: String, Codable, Sendable {
+	case dropOldest
+}
+
+public struct BrowserCameraVirtualPublisherConfiguration: Codable, Equatable, Hashable, Sendable {
+	public let sourceDeviceID: String
+	public let filterPreset: BrowserCameraFilterPreset
+	public let frameWidth: Int
+	public let frameHeight: Int
+	public let nominalFramesPerSecond: Int
+	public let pixelFormat: BrowserCameraVirtualPublisherPixelFormat
+	public let backpressurePolicy: BrowserCameraVirtualPublisherBackpressurePolicy
+	public let transportMode: BrowserCameraVirtualPublisherTransportMode
+
+	public init(
+		sourceDeviceID: String,
+		filterPreset: BrowserCameraFilterPreset,
+		frameWidth: Int,
+		frameHeight: Int,
+		nominalFramesPerSecond: Int,
+		pixelFormat: BrowserCameraVirtualPublisherPixelFormat,
+		backpressurePolicy: BrowserCameraVirtualPublisherBackpressurePolicy,
+		transportMode: BrowserCameraVirtualPublisherTransportMode
+	) {
+		self.sourceDeviceID = sourceDeviceID
+		self.filterPreset = filterPreset
+		self.frameWidth = frameWidth
+		self.frameHeight = frameHeight
+		self.nominalFramesPerSecond = nominalFramesPerSecond
+		self.pixelFormat = pixelFormat
+		self.backpressurePolicy = backpressurePolicy
+		self.transportMode = transportMode
+	}
+}
+
+public struct BrowserCameraVirtualPublisherHealthSnapshot: Codable, Equatable, Hashable, Sendable {
+	public let heartbeatAgeSeconds: Double?
+	public let reconnectCount: Int
+	public let placeholderFrameActive: Bool?
+
+	public init(
+		heartbeatAgeSeconds: Double?,
+		reconnectCount: Int,
+		placeholderFrameActive: Bool?
+	) {
+		self.heartbeatAgeSeconds = heartbeatAgeSeconds
+		self.reconnectCount = reconnectCount
+		self.placeholderFrameActive = placeholderFrameActive
+	}
+}
+
+public struct BrowserCameraVirtualPublisherTransportConfiguration: Codable, Equatable, Hashable, Sendable {
+	public let protocolVersion: Int
+
+	public init(protocolVersion: Int) {
+		self.protocolVersion = protocolVersion
+	}
+}
+
+public enum BrowserCameraVirtualPublisherEmbeddingState: String, Codable, Sendable {
+	case notRequired
+	case embedded
+	case notEmbedded
+	case unknown
+}
+
+public enum BrowserCameraVirtualPublisherApprovalState: String, Codable, Sendable {
+	case notRequired
+	case notRequested
+	case approved
+	case denied
+	case awaitingUserApproval
+	case unknown
+}
+
+public enum BrowserCameraVirtualPublisherReachabilityState: String, Codable, Sendable {
+	case notRequired
+	case reachable
+	case unreachable
+	case unknown
+}
+
+public enum BrowserCameraVirtualPublisherProtocolCompatibilityState: String, Codable, Sendable {
+	case notRequired
+	case compatible
+	case incompatible
+	case unknown
+}
+
+public struct BrowserCameraVirtualPublisherStatus: Codable, Equatable, Hashable, Sendable {
+	public let state: BrowserCameraVirtualPublisherState
+	public let configuration: BrowserCameraVirtualPublisherConfiguration?
+	public let lastPublishedFrame: Date?
+	public let lastErrorDescription: String?
+	public let embeddingState: BrowserCameraVirtualPublisherEmbeddingState
+	public let approvalState: BrowserCameraVirtualPublisherApprovalState
+	public let reachabilityState: BrowserCameraVirtualPublisherReachabilityState
+	public let protocolCompatibilityState: BrowserCameraVirtualPublisherProtocolCompatibilityState
+	public let transportConfiguration: BrowserCameraVirtualPublisherTransportConfiguration?
+	public let healthSnapshot: BrowserCameraVirtualPublisherHealthSnapshot?
+	public let lastTransportErrorDescription: String?
+	public let lastExtensionFailureDescription: String?
+
+	public static let notRequired = BrowserCameraVirtualPublisherStatus(
+		state: .notRequired,
+		configuration: nil,
+		lastPublishedFrame: nil,
+		lastErrorDescription: nil
+	)
+
+	public init(
+		state: BrowserCameraVirtualPublisherState,
+		configuration: BrowserCameraVirtualPublisherConfiguration?,
+		lastPublishedFrame: Date?,
+		lastErrorDescription: String?,
+		embeddingState: BrowserCameraVirtualPublisherEmbeddingState = .notRequired,
+		approvalState: BrowserCameraVirtualPublisherApprovalState = .notRequired,
+		reachabilityState: BrowserCameraVirtualPublisherReachabilityState = .notRequired,
+		protocolCompatibilityState: BrowserCameraVirtualPublisherProtocolCompatibilityState = .notRequired,
+		transportConfiguration: BrowserCameraVirtualPublisherTransportConfiguration? = nil,
+		healthSnapshot: BrowserCameraVirtualPublisherHealthSnapshot? = nil,
+		lastTransportErrorDescription: String? = nil,
+		lastExtensionFailureDescription: String? = nil
+	) {
+		self.state = state
+		self.configuration = configuration
+		self.lastPublishedFrame = lastPublishedFrame
+		self.lastErrorDescription = lastErrorDescription
+		self.embeddingState = embeddingState
+		self.approvalState = approvalState
+		self.reachabilityState = reachabilityState
+		self.protocolCompatibilityState = protocolCompatibilityState
+		self.transportConfiguration = transportConfiguration
+		self.healthSnapshot = healthSnapshot
+		self.lastTransportErrorDescription = lastTransportErrorDescription
+		self.lastExtensionFailureDescription = lastExtensionFailureDescription
+	}
+}
+
 public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable {
 	public let lifecycleState: BrowserCameraLifecycleState
 	public let healthState: BrowserCameraHealthState
@@ -514,6 +680,16 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 	public let lastErrorDescription: String?
 	public let browserTransportStates: [BrowserCameraBrowserTransportState]
 	public let recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
+	public let publisherStatus: BrowserCameraVirtualPublisherStatus
+
+	public var publisherReachable: Bool {
+		switch publisherStatus.state {
+		case .ready, .degraded:
+			true
+		default:
+			false
+		}
+	}
 
 	public init(
 		lifecycleState: BrowserCameraLifecycleState,
@@ -527,7 +703,8 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 		activePreviewConsumerIDs: [String],
 		managedRoutingSummary: BrowserCameraManagedRoutingSummary,
 		performanceMetrics: BrowserCameraPerformanceMetrics,
-		lastErrorDescription: String?
+		lastErrorDescription: String?,
+		publisherStatus: BrowserCameraVirtualPublisherStatus = .notRequired
 	) {
 		self.init(
 			lifecycleState: lifecycleState,
@@ -542,6 +719,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 			managedRoutingSummary: managedRoutingSummary,
 			performanceMetrics: performanceMetrics,
 			lastErrorDescription: lastErrorDescription,
+			publisherStatus: publisherStatus,
 			browserTransportStates: [],
 			recentDiagnosticEvents: []
 		)
@@ -558,7 +736,8 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 		activeLiveFrameConsumerIDs: [String],
 		activePreviewConsumerIDs: [String],
 		performanceMetrics: BrowserCameraPerformanceMetrics,
-		lastErrorDescription: String?
+		lastErrorDescription: String?,
+		publisherStatus: BrowserCameraVirtualPublisherStatus = .notRequired
 	) {
 		self.init(
 			lifecycleState: lifecycleState,
@@ -576,6 +755,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 			),
 			performanceMetrics: performanceMetrics,
 			lastErrorDescription: lastErrorDescription,
+			publisherStatus: publisherStatus,
 			browserTransportStates: [],
 			recentDiagnosticEvents: []
 		)
@@ -594,6 +774,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 		managedRoutingSummary: BrowserCameraManagedRoutingSummary,
 		performanceMetrics: BrowserCameraPerformanceMetrics,
 		lastErrorDescription: String?,
+		publisherStatus: BrowserCameraVirtualPublisherStatus = .notRequired,
 		browserTransportStates: [BrowserCameraBrowserTransportState] = [],
 		recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
 	) {
@@ -609,6 +790,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 		self.activePreviewConsumerIDs = activePreviewConsumerIDs
 		self.performanceMetrics = performanceMetrics
 		self.lastErrorDescription = lastErrorDescription
+		self.publisherStatus = publisherStatus
 		self.browserTransportStates = browserTransportStates
 		self.recentDiagnosticEvents = recentDiagnosticEvents
 	}
@@ -624,6 +806,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 		activePreviewConsumerIDs: [String],
 		performanceMetrics: BrowserCameraPerformanceMetrics,
 		lastErrorDescription: String?,
+		publisherStatus: BrowserCameraVirtualPublisherStatus = .notRequired,
 		browserTransportStates: [BrowserCameraBrowserTransportState] = [],
 		recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
 	) {
@@ -642,6 +825,7 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 			),
 			performanceMetrics: performanceMetrics,
 			lastErrorDescription: lastErrorDescription,
+			publisherStatus: publisherStatus,
 			browserTransportStates: browserTransportStates,
 			recentDiagnosticEvents: recentDiagnosticEvents
 		)
@@ -656,6 +840,19 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 			.directPhysicalCapture
 		case .unavailable:
 			.routingDisabled
+		case .systemVirtualCameraPublication:
+			switch healthState {
+			case .publisherUnavailable:
+				.publisherUnavailable
+			case .healthy:
+				.available
+			case .sourceLost:
+				.sourceLost
+			case .degraded:
+				.degraded
+			case .pipelineFallback:
+				.pipelineFallback
+			}
 		case .processedNavigatorFeed:
 			switch healthState {
 			case .healthy:
@@ -666,6 +863,8 @@ public struct BrowserCameraDebugSummary: Codable, Equatable, Hashable, Sendable 
 				.degraded
 			case .pipelineFallback:
 				.pipelineFallback
+			case .publisherUnavailable:
+				.publisherUnavailable
 			}
 		}
 
@@ -701,6 +900,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 		case pipelineRuntimeState
 		case browserTransportStates
 		case recentDiagnosticEvents
+		case publisherStatus
 	}
 
 	public let lifecycleState: BrowserCameraLifecycleState
@@ -714,6 +914,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 	public let pipelineRuntimeState: BrowserCameraPipelineRuntimeState?
 	public let browserTransportStates: [BrowserCameraBrowserTransportState]
 	public let recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
+	public let publisherStatus: BrowserCameraVirtualPublisherStatus
 
 	public var activeConsumerKindsByID: [String: BrowserCameraConsumerKind] {
 		activeConsumersByID.reduce(into: [:]) { partialResult, entry in
@@ -756,6 +957,15 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 		!activeConsumersByID.isEmpty
 	}
 
+	public var publisherReachable: Bool {
+		switch publisherStatus.state {
+		case .ready, .degraded:
+			true
+		default:
+			false
+		}
+	}
+
 	public var debugSummary: BrowserCameraDebugSummary {
 		let selectedSourceID = routingSettings.preferredSourceID
 		return BrowserCameraDebugSummary(
@@ -771,6 +981,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 			managedRoutingSummary: managedRoutingSummary,
 			performanceMetrics: performanceMetrics,
 			lastErrorDescription: lastErrorDescription,
+			publisherStatus: publisherStatus,
 			browserTransportStates: browserTransportStates,
 			recentDiagnosticEvents: recentDiagnosticEvents
 		)
@@ -796,6 +1007,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 			activeConsumersByID: activeConsumersByID,
 			performanceMetrics: performanceMetrics,
 			lastErrorDescription: lastErrorDescription,
+			publisherStatus: .notRequired,
 			pipelineRuntimeState: pipelineRuntimeState,
 			browserTransportStates: [],
 			recentDiagnosticEvents: []
@@ -811,6 +1023,36 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 		activeConsumersByID: [String: BrowserCameraConsumer],
 		performanceMetrics: BrowserCameraPerformanceMetrics,
 		lastErrorDescription: String?,
+		pipelineRuntimeState: BrowserCameraPipelineRuntimeState?,
+		browserTransportStates: [BrowserCameraBrowserTransportState],
+		recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
+	) {
+		self.init(
+			lifecycleState: lifecycleState,
+			healthState: healthState,
+			outputMode: outputMode,
+			routingSettings: routingSettings,
+			availableSources: availableSources,
+			activeConsumersByID: activeConsumersByID,
+			performanceMetrics: performanceMetrics,
+			lastErrorDescription: lastErrorDescription,
+			publisherStatus: .notRequired,
+			pipelineRuntimeState: pipelineRuntimeState,
+			browserTransportStates: browserTransportStates,
+			recentDiagnosticEvents: recentDiagnosticEvents
+		)
+	}
+
+	public init(
+		lifecycleState: BrowserCameraLifecycleState,
+		healthState: BrowserCameraHealthState,
+		outputMode: BrowserCameraOutputMode,
+		routingSettings: BrowserCameraRoutingSettings,
+		availableSources: [BrowserCameraSource],
+		activeConsumersByID: [String: BrowserCameraConsumer],
+		performanceMetrics: BrowserCameraPerformanceMetrics,
+		lastErrorDescription: String?,
+		publisherStatus: BrowserCameraVirtualPublisherStatus,
 		pipelineRuntimeState: BrowserCameraPipelineRuntimeState? = nil,
 		browserTransportStates: [BrowserCameraBrowserTransportState] = [],
 		recentDiagnosticEvents: [BrowserCameraDiagnosticEvent]
@@ -823,6 +1065,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 		self.activeConsumersByID = Self.normalizeActiveConsumers(activeConsumersByID)
 		self.performanceMetrics = performanceMetrics
 		self.lastErrorDescription = lastErrorDescription
+		self.publisherStatus = publisherStatus
 		self.pipelineRuntimeState = pipelineRuntimeState
 		self.browserTransportStates = Self.normalizeBrowserTransportStates(browserTransportStates)
 		self.recentDiagnosticEvents = recentDiagnosticEvents
@@ -984,6 +1227,24 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 			forKey: .recentDiagnosticEvents
 		) ?? []
 
+		if let decodedPublisherStatus = try container.decodeIfPresent(
+			BrowserCameraVirtualPublisherStatus.self,
+			forKey: .publisherStatus
+		) {
+			publisherStatus = decodedPublisherStatus
+		}
+		else if healthState == .publisherUnavailable {
+			publisherStatus = BrowserCameraVirtualPublisherStatus(
+				state: .unavailable,
+				configuration: nil,
+				lastPublishedFrame: nil,
+				lastErrorDescription: lastErrorDescription
+			)
+		}
+		else {
+			publisherStatus = .notRequired
+		}
+
 		if let activeConsumersByID = try container.decodeIfPresent(
 			[String: BrowserCameraConsumer].self,
 			forKey: .activeConsumersByID
@@ -1021,6 +1282,7 @@ public struct BrowserCameraSessionSnapshot: Codable, Equatable, Sendable {
 		try container.encodeIfPresent(pipelineRuntimeState, forKey: .pipelineRuntimeState)
 		try container.encode(browserTransportStates, forKey: .browserTransportStates)
 		try container.encode(recentDiagnosticEvents, forKey: .recentDiagnosticEvents)
+		try container.encode(publisherStatus, forKey: .publisherStatus)
 	}
 
 	private var sortedConsumers: [BrowserCameraConsumer] {

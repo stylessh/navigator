@@ -95,6 +95,13 @@ private enum BrowserCameraManagedRoutingSummaryResolver {
 			return unavailableSummary(.degraded)
 		case .pipelineFallback:
 			return unavailableSummary(.pipelineFallback)
+		case .publisherUnavailable:
+			return BrowserCameraManagedRoutingSummary(
+				availability: .publisherUnavailable,
+				genericVideoUsesManagedOutput: false,
+				failClosedOnManagedVideoRequest: false,
+				exposesManagedDeviceIdentity: false
+			)
 		}
 	}
 

@@ -52,8 +52,8 @@ public struct BrowserCameraRendererRoutingConfigurationPayload: Codable, Equatab
 		prefersHorizontalFlip = routingConfiguration.prefersHorizontalFlip
 		outputMode = snapshot.outputMode.rawValue
 		healthState = snapshot.healthState.rawValue
-		publisherState = "notRequired"
-		publisherTransportMode = nil
+		publisherState = snapshot.publisherStatus.state.rawValue
+		publisherTransportMode = snapshot.publisherStatus.configuration?.transportMode.rawValue
 		exposesManagedDeviceIdentity = managedRoutingSummary.exposesManagedDeviceIdentity
 		managedDeviceID = managedRoutingSummary.managedDeviceID
 		self.managedDeviceLabel = managedRoutingSummary.exposesManagedDeviceIdentity

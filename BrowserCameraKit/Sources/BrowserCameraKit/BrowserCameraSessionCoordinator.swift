@@ -631,7 +631,7 @@ public final class BrowserCameraSessionCoordinator: BrowserCameraSessionCoordina
 		_ preferredManagedOutputMode: BrowserCameraOutputMode
 	) -> BrowserCameraOutputMode {
 		switch preferredManagedOutputMode {
-		case .directPhysicalCapture, .processedNavigatorFeed, .unavailable:
+		case .directPhysicalCapture, .processedNavigatorFeed, .systemVirtualCameraPublication, .unavailable:
 			.processedNavigatorFeed
 		}
 	}
