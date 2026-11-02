@@ -115,8 +115,10 @@ final class BrowserLinkHintSessionTests: XCTestCase {
 			targetRect: CGRect(x: 100, y: 50, width: 80, height: 20),
 			bounds: bounds
 		)
-		XCTAssertEqual(small.midY, 60, accuracy: 1)
-		XCTAssertEqual(small.minX, 96, accuracy: 1)
+		// Badge hangs off the top-leading corner: centred near (minX, minY), overlapping the element.
+		XCTAssertEqual(small.midY, 50, accuracy: 1)
+		XCTAssertLessThan(small.minX, 100)
+		XCTAssertGreaterThan(small.maxX, 100)
 
 		let offscreen = BrowserLinkHintOverlayView.chipFrame(
 			size: size,

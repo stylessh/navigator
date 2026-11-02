@@ -94,8 +94,12 @@ final class BrowserLinkHintOverlayView: NSView {
 	static func chipFrame(size: CGSize, targetRect: CGRect, bounds: CGRect) -> CGRect {
 		var origin: CGPoint
 		if targetRect.height <= 44 {
-			// Small targets (links in text, buttons): sit on the leading edge, vertically centred.
-			origin = CGPoint(x: targetRect.minX - 4, y: targetRect.midY - size.height / 2)
+			// Small targets (links in text, buttons): hang off the top-leading corner like a badge,
+			// so the chip covers as little of the element's own text as possible.
+			origin = CGPoint(
+				x: targetRect.minX - size.width * 0.45,
+				y: targetRect.minY - size.height * 0.5
+			)
 		}
 		else {
 			// Large targets (cards, images): tuck into the top-leading corner.
@@ -235,7 +239,7 @@ final class BrowserLinkHintChipView: NSView {
 	private static let cornerRadius: CGFloat = 7
 
 	private let label: String
-	private let textField = NSTextField(labelWithString: "")
+	private let textView = BrowserLinkHintLabelView()
 	private var typedPrefixLength = 0
 	private var isShown = true
 
@@ -243,28 +247,22 @@ final class BrowserLinkHintChipView: NSView {
 		self.label = label
 		super.init(frame: .zero)
 		wantsLayer = true
-		textField.font = Self.font
-		textField.alignment = .center
-		textField.translatesAutoresizingMaskIntoConstraints = true
-		textField.setAccessibilityElement(false)
 		applyText()
 
-		let textSize = textField.intrinsicContentSize
+		// Size from the measured string, not NSTextField's intrinsic size: inside
+		// NSGlassEffectView the text field was laid out a few points wide and clipped.
+		let textSize = textView.attributedString.size()
 		let size = CGSize(
-			width: ceil(textSize.width + Self.horizontalPadding * 2),
+			width: max(ceil(textSize.width + Self.horizontalPadding * 2), ceil(textSize.height + Self.verticalPadding * 2)),
 			height: ceil(textSize.height + Self.verticalPadding * 2)
 		)
 		frame = CGRect(origin: .zero, size: size)
-		let background = Self.makeBackground(kind: kind, size: size, content: textField)
+		textView.frame = bounds
+		textView.autoresizingMask = [.width, .height]
+		let background = Self.makeBackground(kind: kind, size: size, content: textView)
 		background.frame = bounds
 		background.autoresizingMask = [.width, .height]
 		addSubview(background)
-		textField.frame = CGRect(
-			x: Self.horizontalPadding,
-			y: Self.verticalPadding,
-			width: textSize.width,
-			height: textSize.height
-		)
 		setAccessibilityElement(true)
 		setAccessibilityLabel("Hint \(label.uppercased())")
 	}
@@ -287,9 +285,9 @@ final class BrowserLinkHintChipView: NSView {
 				let glass = NSGlassEffectView()
 				glass.cornerRadius = cornerRadius
 				glass.tintColor = tint
-				let host = NSView(frame: CGRect(origin: .zero, size: size))
-				host.addSubview(content)
-				glass.contentView = host
+				glass.frame = CGRect(origin: .zero, size: size)
+				content.frame = glass.bounds
+				glass.contentView = content
 				return glass
 			}
 		#endif
@@ -331,7 +329,7 @@ final class BrowserLinkHintChipView: NSView {
 				range: NSRange(location: 0, length: min(typedPrefixLength, display.utf16.count))
 			)
 		}
-		textField.attributedStringValue = attributed
+		textView.attributedString = attributed
 	}
 
 	func setTypedPrefixLength(_ length: Int) {
@@ -441,5 +439,29 @@ final class BrowserLinkHintChipView: NSView {
 		pulse.toValue = NSValue(caTransform3D: CATransform3DIdentity)
 		pulse.duration = pulse.settlingDuration
 		layer.add(pulse, forKey: "pulse")
+	}
+}
+
+/// Draws a hint label centred in its bounds. Custom drawing keeps sizing exact; NSTextField's
+/// own layout got squeezed when hosted as a glass effect view's content.
+@MainActor
+private final class BrowserLinkHintLabelView: NSView {
+	var attributedString = NSAttributedString() {
+		didSet { needsDisplay = true }
+	}
+
+	override var isFlipped: Bool { true }
+
+	override func hitTest(_ point: NSPoint) -> NSView? {
+		nil
+	}
+
+	override func draw(_ dirtyRect: NSRect) {
+		let size = attributedString.size()
+		let origin = CGPoint(
+			x: (bounds.width - size.width) / 2,
+			y: (bounds.height - size.height) / 2
+		)
+		attributedString.draw(at: origin)
 	}
 }
