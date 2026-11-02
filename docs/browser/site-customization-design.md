@@ -18,7 +18,7 @@ file you can version, diff and edit in your own editor.
 | Page runtime | `Resources/boost-runtime.js` | An idempotent script that applies styles through `adoptedStyleSheets`, runs user scripts once per revision, tags sticky bars, and runs the element picker. |
 | Script builder | `BoostScriptBuilder.swift` | Turns boosts into the JS strings that native code evaluates, with JSON-escaped payloads and stable FNV revisions. |
 | Action registry (plugin API) | `NavigatorActions.swift` | `NavigatorAction` with placements (`toolbar`, `commandBar`, `pageMenu`), availability, and `perform(context, performer)`. |
-| Built-in actions | `BuiltInActions.swift` | Zap Element (⌥⌘Z), Customize This Site (⌥⌘B), Toggle Site Boost, Copy Clean Link (⌥⌘C), and one toggle per preset. |
+| Built-in actions | `BuiltInActions.swift` | Zap Element (⌥⌘Z), Customize This Site (⌥⌘B), Toggle Site Boost, Copy Clean Link (⌥⇧⌘C), and one toggle per preset. |
 | User actions | `UserActionManifest.swift` | JSON manifests in `~/Library/Application Support/Navigator/Actions/`, run as `openURL` templates or page `script`s. Two examples are seeded on first launch. |
 | Panel UI | `BrowserCustomizationUI/` | The glass panel (Liquid Glass on macOS 26, with `.ultraThinMaterial` as the macOS 15 fallback). It has spring-driven chips, rows and the entrance. |
 | Browser glue | `BrowserView/…/SiteCustomization/` | Page lifecycle hooks, injection, picker polling, the panel window, and the `NavigatorActionPerformer` implementation. |
