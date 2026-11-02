@@ -61,7 +61,7 @@ final class DeveloperOverlayPayloadTests: XCTestCase {
 final class DeveloperOverlayAgentScriptTests: XCTestCase {
 	func testStringLiteralEscapesQuotesNewlinesAndLineSeparators() {
 		XCTAssertEqual(DeveloperOverlayAgentScript.jsStringLiteral("a\"b\nc"), #""a\"b\nc""#)
-		XCTAssertEqual(DeveloperOverlayAgentScript.jsStringLiteral("x\u{2028}y"), #""x y""#)
+		XCTAssertEqual(DeveloperOverlayAgentScript.jsStringLiteral("x\u{2028}y"), #""x\u2028y""#)
 	}
 
 	func testPollScriptReferencesRevisionAndSentinel() {
@@ -106,6 +106,7 @@ final class DeveloperSpringTests: XCTestCase {
 
 @MainActor
 final class DeveloperOverlayModelTests: XCTestCase {
+	@MainActor
 	private final class FakePage {
 		var identity: AnyHashable? = "tab-1"
 		var scripts: [String] = []

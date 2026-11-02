@@ -3,7 +3,7 @@ import SwiftUI
 /// The whole overlay: the HUD capsule (top trailing), the viewport shelf, and the panel.
 /// It's laid over the browser area at full size; only the glass shapes take clicks.
 struct DeveloperOverlayRootView: View {
-	static let coordinateSpaceName = "developerOverlay"
+	nonisolated static let coordinateSpaceName = "developerOverlay"
 
 	@Bindable var model: DeveloperOverlayModel
 	let hitRegions: DeveloperOverlayHitRegions
