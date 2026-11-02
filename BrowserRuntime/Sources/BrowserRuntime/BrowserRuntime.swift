@@ -1867,7 +1867,10 @@ public final class BrowserRuntime: @unchecked Sendable {
 		let existingMarker = try? String(contentsOf: compatibilityMarkerURL, encoding: .utf8)
 		let directoryContents = (try? fileManager.contentsOfDirectory(atPath: baseURL.path)) ?? []
 		let shouldRotateCache = !directoryContents.isEmpty
-			&& existingMarker?.trimmingCharacters(in: .whitespacesAndNewlines) != currentMarker
+			&& Self.cacheRequiresRotation(
+				existingMarker: existingMarker?.trimmingCharacters(in: .whitespacesAndNewlines),
+				currentMarker: currentMarker
+			)
 
 		if shouldRotateCache, fileManager.fileExists(atPath: baseURL.path) {
 			rotateCacheDirectory(at: baseURL)
@@ -1969,6 +1972,32 @@ public final class BrowserRuntime: @unchecked Sendable {
 			"schema=\(cacheCompatibilitySchemaVersion)",
 			cefVersion,
 		].joined(separator: "|")
+	}
+
+	/// Chromium migrates a profile forward on its own, so a CEF upgrade keeps the
+	/// existing profile (logins, cookies, history). The cache is only moved aside
+	/// when the marker is missing or unreadable, the schema changed, or the stored
+	/// CEF version is newer than the running one (a downgrade, which Chromium
+	/// can't read safely).
+	static func cacheRequiresRotation(existingMarker: String?, currentMarker: String) -> Bool {
+		guard let existingMarker, !existingMarker.isEmpty else { return true }
+		if existingMarker == currentMarker { return false }
+
+		let existing = parsedCacheMarker(existingMarker)
+		let current = parsedCacheMarker(currentMarker)
+		guard let existingSchema = existing.schema, existingSchema == current.schema else { return true }
+		guard !existing.version.isEmpty, !current.version.isEmpty else { return true }
+		return current.version.lexicographicallyPrecedes(existing.version)
+	}
+
+	private static func parsedCacheMarker(_ marker: String) -> (schema: String?, version: [Int]) {
+		let parts = marker.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+		let schema = parts.first.flatMap { $0.hasPrefix("schema=") ? String($0.dropFirst("schema=".count)) : nil }
+		let versionString = parts.count > 1 ? parts[1] : ""
+		// Read the leading dotted numbers, e.g. "156.0.8078.80" or "156.0.15+gcf671c0+...".
+		let numericPrefix = versionString.prefix { $0.isNumber || $0 == "." }
+		let version = numericPrefix.split(separator: ".").compactMap { Int($0) }
+		return (schema, version)
 	}
 
 	@MainActor
