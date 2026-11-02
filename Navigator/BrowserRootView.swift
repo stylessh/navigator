@@ -212,7 +212,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	/// Debug-only launch switches so toolbar states can be checked without pointer input:
 	///   NAVIGATOR_DEBUG_TOOLBAR=expanded|shelf   pin the toolbar open (optionally with tab shelf)
 	///   NAVIGATOR_DEBUG_WINDOW_BUTTONS=1          keep the traffic lights visible
-	///   NAVIGATOR_DEBUG_OPEN_URLS=url1,url2       open these in the current tab + new tabs
+	///   NAVIGATOR_DEBUG_OPEN_URLS=url1,url2       open these in new tabs (last one selected)
 	private func applyFloatingChromeDebugOverrides() {
 		#if DEBUG
 			let environment = ProcessInfo.processInfo.environment
@@ -234,7 +234,8 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 			}
 			if let urls = environment["NAVIGATOR_DEBUG_OPEN_URLS"], !didApplyDebugURLs {
 				didApplyDebugURLs = true
-				navigatorAppViewModel.openExternalURLs(
+				// New tabs, so the startup load of the first tab can't replace them.
+				navigatorAppViewModel.openIncomingURLsInNewTabs(
 					urls.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
 				)
 			}
