@@ -9,9 +9,11 @@ enum NavigatorSettingsSection: Int, CaseIterable {
 	case camera
 	case account
 	case colophon
+	case experiments
 
 	static let allCases: [NavigatorSettingsSection] = [
 		.general,
+		.experiments,
 		.account,
 		.colophon,
 	]

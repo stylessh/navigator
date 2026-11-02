@@ -17,6 +17,12 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var actionBarPanel: BrowserActionBarView?
 	private var sidebarHideWorkItem: DispatchWorkItem?
 	private var toastHostView: NSHostingView<AnyView>?
+	private var floatingToolbarHostView: BrowserFloatingToolbarHostView?
+	private let floatingToolbarState = BrowserFloatingToolbarState()
+	private var floatingChromeMouseMonitor: Any?
+	private var areWindowButtonsRevealed = false
+	private static let floatingToolbarRevealDistance: CGFloat = 96
+	private static let windowButtonsRevealSize = CGSize(width: 120, height: 44)
 	private static let sidebarOuterPadding: CGFloat = 10
 	private static let sidebarVisibleInset: CGFloat = 5
 	private static let toastTitleFontSize: CGFloat = 14
@@ -77,6 +83,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		applyResolvedColors()
 		browserActionBarViewModel.dismiss()
 		buildComposition()
+		buildFloatingToolbar()
 		buildToastHost()
 	}
 
@@ -89,16 +96,21 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 			self?.view.window
 		}
 		actionBarPanel?.attach(to: view.window)
+		observeFloatingToolbarInputs()
 	}
 
 	override func viewDidAppear() {
 		super.viewDidAppear()
 		actionBarPanel?.attach(to: view.window)
+		view.window?.acceptsMouseMovedEvents = true
+		startFloatingChromeMouseMonitor()
+		setWindowButtonsRevealed(false, animated: false)
 	}
 
 	override func viewWillDisappear() {
 		super.viewWillDisappear()
 		actionBarPanel?.removeFromWindow()
+		stopFloatingChromeMouseMonitor()
 	}
 
 	override func viewDidLayout() {
@@ -112,45 +124,157 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		browserView.translatesAutoresizingMaskIntoConstraints = false
 		view.addSubview(browserView)
 
-		let sidebarView = BrowserSidebarPanel(
-			viewModel: sidebarViewModel,
-			presentation: sidebarPresentation,
-			width: sidebarWidth,
-			onWidthChange: { [weak self] nextWidth in
-				self?.updateSidebarWidthDuringDrag(nextWidth)
-			},
-			onCommitWidth: { [weak self] nextWidth in
-				self?.commitSidebarWidth(nextWidth)
-			}
-		)
-		sidebarPanel = sidebarView
-		sidebarView.translatesAutoresizingMaskIntoConstraints = false
-		view.addSubview(sidebarView)
-
-		sidebarPanelLeadingConstraint = sidebarView.leadingAnchor.constraint(
-			equalTo: view.leadingAnchor,
-			constant: sidebarLeadingConstant(isPresented: sidebarPresentation.isPresented, width: sidebarWidth)
-		)
-		sidebarPanelWidthConstraint = sidebarView.widthAnchor.constraint(equalToConstant: sidebarWidth)
-
-		guard
-			let sidebarPanelLeadingConstraint,
-			let sidebarPanelWidthConstraint,
-			let sidebarView = sidebarPanel
-		else { return }
+		// Minimal chrome: the page runs edge to edge and the floating toolbar is the only UI.
+		// The sidebar panel is intentionally not mounted (and its hover reveal is disabled);
+		// BrowserSidebarViewModel still owns the tab/space model.
+		browserChromeViewModel.isSidebarRevealEnabled = false
 
 		NSLayoutConstraint.activate([
-			browserView.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.sidebarOuterPadding),
-			browserView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Self.sidebarOuterPadding),
-			browserView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Self.sidebarOuterPadding),
-			browserView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.sidebarOuterPadding),
-			sidebarView.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.sidebarVisibleInset),
-			sidebarPanelLeadingConstraint,
-			sidebarPanelWidthConstraint,
-			sidebarView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Self.sidebarVisibleInset),
+			browserView.topAnchor.constraint(equalTo: view.topAnchor),
+			browserView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+			browserView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+			browserView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
 		])
+	}
 
-		configurePanelFromExistingState()
+	private func buildFloatingToolbar() {
+		let hostView = BrowserFloatingToolbarHostView(rootView: makeFloatingToolbarView())
+		view.addSubview(hostView)
+		floatingToolbarHostView = hostView
+
+		NSLayoutConstraint.activate([
+			hostView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+			hostView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+			hostView.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor),
+			hostView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor),
+		])
+	}
+
+	private func makeFloatingToolbarView() -> BrowserFloatingToolbarView {
+		let sidebarViewModel = sidebarViewModel
+		let appViewModel = navigatorAppViewModel
+		let toolbarState = floatingToolbarState
+		return BrowserFloatingToolbarView(
+			sidebarViewModel: sidebarViewModel,
+			state: toolbarState,
+			actions: BrowserFloatingToolbarActions(
+				goBack: { sidebarViewModel.goBack() },
+				goForward: { sidebarViewModel.goForward() },
+				reload: { sidebarViewModel.reload() },
+				openLocation: { appViewModel.presentLocationActionBar() },
+				openNewTab: { appViewModel.presentNewTabActionBar() },
+				selectTab: { tabID in sidebarViewModel.selectTab(id: tabID) },
+				closeTab: { tabID in sidebarViewModel.closeTab(id: tabID) }
+			)
+		)
+	}
+
+	/// Screen-space frame of the toolbar's address pill, so overlays (e.g. the command bar)
+	/// can spring out of it. Nil when the toolbar isn't on screen.
+	func addressPillScreenRect() -> NSRect? {
+		guard let floatingToolbarHostView else { return nil }
+		return floatingToolbarHostView.screenRect(forHostedRect: floatingToolbarState.addressPillFrame)
+	}
+
+	/// Extra toolbar buttons supplied by other modules (rendered after the tab cluster).
+	func setFloatingToolbarAccessories(_ accessories: [BrowserFloatingToolbarAccessory]) {
+		floatingToolbarState.trailingAccessories = accessories
+	}
+
+	private func observeFloatingToolbarInputs() {
+		withObservationTracking {
+			floatingToolbarState.autoCollapses = NavigatorExperiments.shared.isEnabled(.floatingToolbarAutoHide)
+			_ = sidebarViewModel.selectedTabID
+			_ = sidebarViewModel.selectedTabCurrentURL
+		} onChange: { [weak self] in
+			Task { @MainActor [weak self] in
+				guard let self else { return }
+				self.floatingToolbarState.flash()
+				self.observeFloatingToolbarInputs()
+			}
+		}
+	}
+
+	private func startFloatingChromeMouseMonitor() {
+		guard floatingChromeMouseMonitor == nil else { return }
+		floatingChromeMouseMonitor = NSEvent.addLocalMonitorForEvents(
+			matching: [.mouseMoved, .leftMouseDragged]
+		) { [weak self] event in
+			MainActor.assumeIsolated {
+				self?.handleFloatingChromeMouseMove(event)
+			}
+			return event
+		}
+	}
+
+	private func stopFloatingChromeMouseMonitor() {
+		if let floatingChromeMouseMonitor {
+			NSEvent.removeMonitor(floatingChromeMouseMonitor)
+		}
+		floatingChromeMouseMonitor = nil
+	}
+
+	private func handleFloatingChromeMouseMove(_ event: NSEvent) {
+		guard event.window === view.window else {
+			floatingToolbarState.setPointerNearBottom(false)
+			setWindowButtonsRevealed(false, animated: true)
+			return
+		}
+		let location = view.convert(event.locationInWindow, from: nil)
+		let isInside = view.bounds.contains(location)
+		floatingToolbarState.setPointerNearBottom(
+			isInside && location.y <= Self.floatingToolbarRevealDistance
+		)
+		let isNearWindowButtons = isInside
+			&& location.x <= Self.windowButtonsRevealSize.width
+			&& location.y >= view.bounds.height - Self.windowButtonsRevealSize.height
+		setWindowButtonsRevealed(isNearWindowButtons, animated: true)
+	}
+
+	private func standardWindowButtons(in window: NSWindow? = nil) -> [NSButton] {
+		guard let window = window ?? view.window else { return [] }
+		return [
+			NSWindow.ButtonType.closeButton,
+			.miniaturizeButton,
+			.zoomButton,
+		].compactMap { window.standardWindowButton($0) }
+	}
+
+	/// Traffic lights stay hidden for a clean, edge-to-edge page and fade in when the pointer
+	/// reaches the top-left corner.
+	private func setWindowButtonsRevealed(_ isRevealed: Bool, animated: Bool) {
+		guard let window = view.window else { return }
+		guard isRevealed != areWindowButtonsRevealed || !animated else { return }
+		areWindowButtonsRevealed = isRevealed
+		let buttons = standardWindowButtons(in: window)
+
+		if isRevealed {
+			buttons.forEach { button in
+				if button.isHidden {
+					button.alphaValue = 0
+					button.isHidden = false
+				}
+			}
+		}
+
+		guard animated else {
+			buttons.forEach { button in
+				button.alphaValue = isRevealed ? 1 : 0
+				button.isHidden = !isRevealed
+			}
+			return
+		}
+
+		NSAnimationContext.runAnimationGroup { context in
+			context.duration = 0.18
+			context.allowsImplicitAnimation = true
+			buttons.forEach { $0.animator().alphaValue = isRevealed ? 1 : 0 }
+		} completionHandler: { [weak self] in
+			MainActor.assumeIsolated {
+				guard let self, !self.areWindowButtonsRevealed else { return }
+				self.standardWindowButtons().forEach { $0.isHidden = true }
+			}
+		}
 	}
 
 	private func configurePanelFromExistingState() {

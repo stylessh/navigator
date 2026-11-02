@@ -5551,6 +5551,7 @@ final class NavigatorSettingsViewTests: XCTestCase {
 			requestedSymbols.map(\.1),
 			[
 				"slider.horizontal.3",
+				"flask.fill",
 				"person.crop.circle.fill",
 				"book.closed.fill",
 			]

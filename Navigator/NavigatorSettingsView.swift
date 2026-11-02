@@ -1,6 +1,7 @@
 import Aesthetics
 import AppKit
 import BrowserSidebar
+import SwiftUI
 import Vendors
 
 enum NavigatorSettingsInterfaceIdentifier {
@@ -278,6 +279,7 @@ final class NavigatorSettingsView: DoubleStrokePanelView {
 		sectionContentBySection[.general] = makeGeneralSectionView()
 		sectionContentBySection[.account] = makeAccountSectionView()
 		sectionContentBySection[.colophon] = makeColophonSectionView()
+		sectionContentBySection[.experiments] = makeExperimentsSectionView()
 	}
 
 	private func configureLayout() {
@@ -439,6 +441,13 @@ final class NavigatorSettingsView: DoubleStrokePanelView {
 		])
 
 		return container
+	}
+
+	private func makeExperimentsSectionView() -> NSView {
+		let hostingView = NSHostingView(rootView: NavigatorExperimentsSettingsView())
+		hostingView.translatesAutoresizingMaskIntoConstraints = false
+		hostingView.sizingOptions = []
+		return hostingView
 	}
 
 	private func makeColophonSectionView() -> NSView {
@@ -666,6 +675,8 @@ extension NavigatorSettingsSection {
 			return String(localized: .navigatorSettingsSectionAccount)
 		case .colophon:
 			return String(localized: .navigatorSettingsSectionColophon)
+		case .experiments:
+			return "Experiments"
 		}
 	}
 
@@ -730,6 +741,8 @@ extension NavigatorSettingsSection {
 			return isSelected ? "person.crop.circle.fill" : "person.crop.circle"
 		case .colophon:
 			return isSelected ? "book.closed.fill" : "book.closed"
+		case .experiments:
+			return isSelected ? "flask.fill" : "flask"
 		}
 	}
 }
@@ -745,6 +758,8 @@ private extension NavigatorSettingsSection {
 			return "navigator-settings-account"
 		case .colophon:
 			return "navigator-settings-colophon"
+		case .experiments:
+			return "navigator-settings-experiments"
 		}
 	}
 
@@ -756,7 +771,7 @@ private extension NavigatorSettingsSection {
 			return "navigator-settings-camera-fill"
 		case .account:
 			return "navigator-settings-account-fill"
-		case .colophon:
+		case .colophon, .experiments:
 			return nil
 		}
 	}
