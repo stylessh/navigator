@@ -36,7 +36,7 @@ final class BrowserLinkPeekController {
 
 	private static let backdropOpacity: Float = 0.22
 	/// Like Arc's peek, the page behind the card recedes a little so the card reads as the focus.
-	private static let recededPageScale: CGFloat = 0.975
+	private static let recededPageScale: CGFloat = 0.985
 	private static let forceClickStage = 2
 	private static let hitTestTimeout: Duration = .milliseconds(500)
 
