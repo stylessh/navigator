@@ -12,6 +12,7 @@
 		3F4A1D8F7C9B4A2E8D6F3C11 /* BrowserView in Frameworks */ = {isa = PBXBuildFile; productRef = EF3C1A9B7D6F4A28B0C1D2E34 /* BrowserView */; };
 		4DE7FBAFA578A15D73146E5A /* NavigatorKeyboardShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5D5F65B4AA34048C5F6A5E /* NavigatorKeyboardShortcutTests.swift */; };
 		4F9A72C11E7D4A6E98C4F22A /* OverlayView in Frameworks */ = {isa = PBXBuildFile; productRef = 4F9A72C01E7D4A6E98C4F229 /* OverlayView */; };
+		D7E0A11C5B3F4E2A9C8D6F01 /* DeveloperOverlay in Frameworks */ = {isa = PBXBuildFile; productRef = D7E0A11C5B3F4E2A9C8D6F03 /* DeveloperOverlay */; };
 		4F9A72C21E7D4A6E98C4F22A /* BrowserRootViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9A72C31E7D4A6E98C4F22A /* BrowserRootViewControllerTests.swift */; };
 		500A155B2F58D1D30061665C /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500A15582F58D1D30061665C /* main.swift */; };
 		500A155C2F58D1D30061665C /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 500A15592F58D1D30061665C /* README.md */; };
@@ -40,6 +41,7 @@
 		1C6E9A1B7D2E4F0A9B3C5D70 /* BrowserActionBar */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = BrowserActionBar; sourceTree = "<group>"; };
 		2B6E9F5D8C4A3D1E9F0B2C3A4 /* BrowserView */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = BrowserView; sourceTree = "<group>"; };
 		4F9A72BF1E7D4A6E98C4F228 /* OverlayView */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = OverlayView; sourceTree = "<group>"; };
+		D7E0A11C5B3F4E2A9C8D6F02 /* DeveloperOverlay */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DeveloperOverlay; sourceTree = "<group>"; };
 		4F9A72C31E7D4A6E98C4F22A /* BrowserRootViewControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserRootViewControllerTests.swift; sourceTree = "<group>"; };
 		500A14072F58BE0F0061665C /* Vendors */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Vendors; sourceTree = "<group>"; };
 		500A15572F58D1940061665C /* CEFShared */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = CEFShared; sourceTree = "<group>"; };
@@ -107,6 +109,7 @@
 				3F4A1D8F7C9B4A2E8D6F3C11 /* BrowserView in Frameworks */,
 				60F0B10A2F5A000000000001 /* ModelKit in Frameworks */,
 				4F9A72C11E7D4A6E98C4F22A /* OverlayView in Frameworks */,
+				D7E0A11C5B3F4E2A9C8D6F01 /* DeveloperOverlay in Frameworks */,
 				F2E8A8E3234567890ABCDEF3 /* Vendors in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -181,6 +184,7 @@
 				60F0B1062F5A000000000001 /* ModelKit */,
 				500D2C952F5BF2D300B081AB /* Networking */,
 				4F9A72BF1E7D4A6E98C4F228 /* OverlayView */,
+				D7E0A11C5B3F4E2A9C8D6F02 /* DeveloperOverlay */,
 				5023D02F2F5E3CC900F45AF9 /* ReorderableList */,
 				7A6C9D1027A84E0FA61B4010 /* TrackpadGestures */,
 				500A14072F58BE0F0061665C /* Vendors */,
@@ -241,6 +245,7 @@
 				EF3C1A9B7D6F4A28B0C1D2E34 /* BrowserView */,
 				60F0B10B2F5A000000000001 /* ModelKit */,
 				4F9A72C01E7D4A6E98C4F229 /* OverlayView */,
+				D7E0A11C5B3F4E2A9C8D6F03 /* DeveloperOverlay */,
 				F2E8A8E2234567890ABCDEF2 /* Vendors */,
 			);
 			productName = Navigator;
@@ -349,6 +354,7 @@
 				60F0B1052F5A000000000001 /* XCLocalSwiftPackageReference "MiumKit" */,
 				60F0B1082F5A000000000001 /* XCLocalSwiftPackageReference "ModelKit" */,
 				4F9A72BE1E7D4A6E98C4F227 /* XCLocalSwiftPackageReference "OverlayView" */,
+				D7E0A11C5B3F4E2A9C8D6F04 /* XCLocalSwiftPackageReference "DeveloperOverlay" */,
 				500D2C6E2F5BF27A00B081AB /* XCLocalSwiftPackageReference "Aesthetics" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -908,6 +914,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		D7E0A11C5B3F4E2A9C8D6F04 /* XCLocalSwiftPackageReference "DeveloperOverlay" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = DeveloperOverlay;
+		};
 		1C6E9A1B7D2E4F0A9B3C5D73 /* XCLocalSwiftPackageReference "BrowserActionBar" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = BrowserActionBar;
@@ -967,6 +977,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D7E0A11C5B3F4E2A9C8D6F03 /* DeveloperOverlay */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7E0A11C5B3F4E2A9C8D6F04 /* XCLocalSwiftPackageReference "DeveloperOverlay" */;
+			productName = DeveloperOverlay;
+		};
 		1C6E9A1B7D2E4F0A9B3C5D72 /* BrowserActionBar */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1C6E9A1B7D2E4F0A9B3C5D73 /* XCLocalSwiftPackageReference "BrowserActionBar" */;

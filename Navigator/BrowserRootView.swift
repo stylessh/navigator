@@ -19,6 +19,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var toastHostView: NSHostingView<AnyView>?
 	private var floatingToolbarHostView: BrowserFloatingToolbarHostView?
 	private let floatingToolbarState = BrowserFloatingToolbarState()
+	private let developerOverlay = NavigatorDeveloperOverlay()
 	private var floatingChromeMouseMonitor: Any?
 	private var areWindowButtonsRevealed = false
 	private static let floatingToolbarRevealDistance: CGFloat = 96
@@ -83,6 +84,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		applyResolvedColors()
 		browserActionBarViewModel.dismiss()
 		buildComposition()
+		developerOverlay.installOverlay(in: view)
 		buildFloatingToolbar()
 		buildToastHost()
 	}
@@ -97,6 +99,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		}
 		actionBarPanel?.attach(to: view.window)
 		observeFloatingToolbarInputs()
+		syncDeveloperOverlayToolbarAccessories()
 	}
 
 	override func viewDidAppear() {
@@ -120,7 +123,8 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 
 	private func buildComposition() {
 		addChild(browserViewController)
-		let browserView = browserViewController.view
+		// The developer overlay's viewport stage wraps the browser view (fills it unless a preset is on).
+		let browserView = developerOverlay.makeStage(for: browserViewController)
 		browserView.translatesAutoresizingMaskIntoConstraints = false
 		view.addSubview(browserView)
 
@@ -179,6 +183,20 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	/// Extra toolbar buttons supplied by other modules (rendered after the tab cluster).
 	func setFloatingToolbarAccessories(_ accessories: [BrowserFloatingToolbarAccessory]) {
 		floatingToolbarState.trailingAccessories = accessories
+	}
+
+	/// Keeps the developer overlay's toolbar button in sync with its Experiments toggle, leaving
+	/// other modules' accessories alone.
+	private func syncDeveloperOverlayToolbarAccessories() {
+		let accessories = withObservationTracking {
+			developerOverlay.toolbarAccessories()
+		} onChange: { [weak self] in
+			Task { @MainActor [weak self] in
+				self?.syncDeveloperOverlayToolbarAccessories()
+			}
+		}
+		floatingToolbarState.trailingAccessories.removeAll { $0.id == "developerOverlay" }
+		floatingToolbarState.trailingAccessories.append(contentsOf: accessories)
 	}
 
 	private func observeFloatingToolbarInputs() {
