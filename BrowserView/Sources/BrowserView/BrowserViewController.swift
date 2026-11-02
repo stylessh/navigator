@@ -197,6 +197,9 @@ public final class BrowserViewController: NSViewController {
 		chromeView.hostedBrowser
 	}
 
+	/// Tint for the selected page; chrome around the browser observes this.
+	public let siteTintStore = BrowserSiteTintStore()
+
 	public func updateSidebarWidth(_ width: CGFloat) {
 		currentSidebarWidth = width
 		browserChromeViewModel.updateSidebarWidth(width)
@@ -219,6 +222,7 @@ public final class BrowserViewController: NSViewController {
 	}
 
 	private func buildChromeUI() {
+		chromeView.siteTintStore = siteTintStore
 		view.addSubview(chromeView)
 		chromeView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -273,6 +277,23 @@ final class BrowserChromeView: NSView {
 	private let timeProvider: () -> TimeInterval
 	private let browserCameraSessionCoordinator: any BrowserCameraSessionCoordinating
 	private let restoredHistoryCoordinator = BrowserRestoredHistoryCoordinator()
+	private lazy var siteTintSampling = BrowserSiteTintSamplingCoordinator(
+		evaluate: { [weak self] tabID, script in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return }
+			// Fire-and-forget in the main frame; the script answers through the page-command channel
+			// (browser-process prompt interception), which doesn't depend on the renderer helper.
+			self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+		},
+		canSample: { [weak self] tabID in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return false }
+			return self.browserRuntime.isLoading(browser) == false
+		}
+	)
+
+	var siteTintStore: BrowserSiteTintStore? {
+		get { siteTintSampling.store }
+		set { siteTintSampling.store = newValue }
+	}
 	private let browserContainerHost = NSView()
 	private let tabHostViewModel = BrowserTabHostViewModel()
 	private var tabConfigurationChangeObserverID: UUID?
@@ -551,6 +572,7 @@ final class BrowserChromeView: NSView {
 
 	private func cleanupMonitors() {
 		lifecycleGeneration += 1
+		siteTintSampling.cancelAll()
 		cancelAllActivations()
 		cancelVisibilityHandoff(hideRetainedTab: true)
 		teardownWindowLifecycleObservers()
@@ -1133,6 +1155,7 @@ final class BrowserChromeView: NSView {
 			self.bindMainFrameNavigationHandler(for: browser, tabID: hostedTab.id)
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
+			self.bindSiteTintPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
 			self.syncNavigationState(for: hostedTab.id)
@@ -1162,6 +1185,7 @@ final class BrowserChromeView: NSView {
 
 	private func removeBrowserContainer(for tabID: BrowserTabID) {
 		restoredHistoryCoordinator.browserRemoved(for: tabID)
+		siteTintSampling.tabRemoved(tabID)
 		cancelActivation(for: tabID)
 		if retainedVisibleTabID == tabID {
 			cancelVisibilityHandoff(hideRetainedTab: false)
@@ -1207,6 +1231,7 @@ final class BrowserChromeView: NSView {
 		if let browser = selectedContainer.browserRef {
 			installBrowserCameraRoutingScript(for: browser, tabID: tabID)
 		}
+		siteTintSampling.tabSelected(tabID)
 		syncNavigationState(for: tabID)
 	}
 
@@ -1502,6 +1527,7 @@ final class BrowserChromeView: NSView {
 				)
 			}
 			self.sidebarViewModel.updateTabURL(url, for: tabID)
+			self.siteTintSampling.navigationCommitted(url, for: tabID)
 			self.restoreScrollStateIfNeeded(for: tabID)
 			self.syncNavigationState(for: tabID)
 		}
@@ -1519,12 +1545,28 @@ final class BrowserChromeView: NSView {
 		}
 	}
 
+	/// Handlers on the page-command channel are dropped by the runtime when the browser closes.
+	private func bindSiteTintPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.addPageCommandHandler(
+			for: browser,
+			name: BrowserSiteTintSampler.commandName
+		) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			guard let payload = command.arguments[BrowserSiteTintSampler.payloadArgument] else { return }
+			self.siteTintSampling.handlePageMessage(payload, for: tabID)
+		}
+	}
+
 	private func bindTitleChangeHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
 		let lifecycleGeneration = self.lifecycleGeneration
 		browserRuntime.setTitleChangeHandler(for: browser) { [weak self] title in
 			guard let self else { return }
 			guard self.lifecycleGeneration == lifecycleGeneration else { return }
 			self.sidebarViewModel.updateTabTitle(title, for: tabID)
+			self.siteTintSampling.titleChanged(for: tabID)
 			if let tab = self.tabViewModel(for: tabID),
 			   let historyUpdate = self.restoredHistoryCoordinator.handleTitleChange(title, for: tab) {
 				self.sidebarViewModel.updateTabSessionHistory(
