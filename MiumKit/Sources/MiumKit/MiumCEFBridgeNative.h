@@ -26,6 +26,11 @@ static constexpr const char* MiumCEFMainFrameNavigationChannel = "__mainFrameNav
 static constexpr const char* MiumCEFOpenURLInTabChannel = "__openURLInTab__";
 static constexpr const char* MiumCEFCameraRoutingEventChannel = "__cameraRoutingEvent__";
 static constexpr const char* MiumCEFCameraRoutingPromptMessage = "__navigatorCameraRoutingEvent__";
+// Generic page -> native command channel. Injected page scripts call
+// window.prompt("__navigatorPageCommand__", JSON.stringify({name, arguments})) and the
+// JS dialog handler forwards the payload on MiumCEFPageCommandChannel.
+static constexpr const char* MiumCEFPageCommandChannel = "__pageCommand__";
+static constexpr const char* MiumCEFPageCommandPromptMessage = "__navigatorPageCommand__";
 static constexpr const char* MiumCEFCameraRoutingEventBridgeFunctionName = "__navigatorCameraRoutingEmitEvent";
 static constexpr const char* MiumCEFCameraRoutingConfigUpdateChannel = "__cameraRoutingConfigUpdate__";
 static constexpr const char* MiumCEFCameraFrameDeliveryChannel = "__cameraFrameDelivery__";
