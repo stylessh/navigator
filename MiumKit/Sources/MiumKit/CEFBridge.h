@@ -146,6 +146,11 @@ void CEFBridge_SetCameraRoutingEventHandler(
   CEFBridgeMessageCallback callback,
   void* user_data
 );
+void CEFBridge_SetPageCommandHandler(
+  CEFBridgeBrowserRef browser_ref,
+  CEFBridgeMessageCallback callback,
+  void* user_data
+);
 void CEFBridge_SetPermissionRequestHandler(
   CEFBridgeBrowserRef browser_ref,
   CEFBridgePermissionRequestCallback callback,

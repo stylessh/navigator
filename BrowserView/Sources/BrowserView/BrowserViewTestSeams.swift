@@ -76,6 +76,36 @@ public protocol BrowserRuntimeDriving: AnyObject {
 	func canGoBack(_ browser: CEFBridgeBrowserRef?) -> Bool
 	func canGoForward(_ browser: CEFBridgeBrowserRef?) -> Bool
 	func isLoading(_ browser: CEFBridgeBrowserRef?) -> Bool
+	@discardableResult
+	func addPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		name: String?,
+		handler: @escaping (BrowserRuntimePageCommand) -> Void
+	) -> BrowserRuntimePageCommandHandlerToken?
+	func removePageCommandHandler(_ token: BrowserRuntimePageCommandHandlerToken)
+	func setPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		handler: ((BrowserRuntimePageCommand) -> Void)?
+	)
+}
+
+public extension BrowserRuntimeDriving {
+	// Default no-ops so lightweight test doubles don't need to implement page commands.
+	@discardableResult
+	func addPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		name: String?,
+		handler: @escaping (BrowserRuntimePageCommand) -> Void
+	) -> BrowserRuntimePageCommandHandlerToken? {
+		nil
+	}
+
+	func removePageCommandHandler(_ token: BrowserRuntimePageCommandHandlerToken) {}
+
+	func setPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		handler: ((BrowserRuntimePageCommand) -> Void)?
+	) {}
 }
 
 extension BrowserRuntime: BrowserRuntimeDriving {}

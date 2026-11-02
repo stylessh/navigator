@@ -160,6 +160,7 @@ static void clearAllBrowserBridgeMessageHandlers(CEFBridgeBrowserRef browserRef)
     MiumCEFMainFrameNavigationChannel,
     MiumCEFOpenURLInTabChannel,
     MiumCEFCameraRoutingEventChannel,
+    MiumCEFPageCommandChannel,
   };
 
   for (const char* channel : kBridgeMessageChannels) {
@@ -640,6 +641,16 @@ void CEFBridge_SetCameraRoutingEventHandler(CEFBridgeBrowserRef browser_ref,
     return;
   }
   setBrowserBridgeMessageHandler(browser_ref, MiumCEFCameraRoutingEventChannel, callback, user_data);
+}
+
+void CEFBridge_SetPageCommandHandler(CEFBridgeBrowserRef browser_ref,
+                                     CEFBridgeMessageCallback callback,
+                                     void* user_data) {
+  if (callback == nullptr) {
+    setBrowserBridgeMessageHandler(browser_ref, MiumCEFPageCommandChannel, nullptr, nullptr);
+    return;
+  }
+  setBrowserBridgeMessageHandler(browser_ref, MiumCEFPageCommandChannel, callback, user_data);
 }
 
 void CEFBridge_SetPermissionRequestHandler(CEFBridgeBrowserRef browser_ref,

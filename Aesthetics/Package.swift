@@ -6,7 +6,7 @@ let package = Package(
 	name: "Aesthetics",
 	platforms: [
 		.iOS(.v15),
-		.macOS(.v14),
+		.macOS("15.0"),
 	],
 	products: [
 		.library(

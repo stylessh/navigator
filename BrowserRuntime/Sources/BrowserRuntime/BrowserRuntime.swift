@@ -1184,6 +1184,7 @@ public final class BrowserRuntime: @unchecked Sendable {
 		browserRuntimeCEFBridgeSetMainFrameNavigationHandler(browser, nil, nil)
 		browserRuntimeCEFBridgeSetOpenURLInTabHandler(browser, nil, nil)
 		browserRuntimeCEFBridgeSetCameraRoutingEventHandler(browser, nil, nil)
+		removeAllPageCommandHandlers(for: browser)
 		permissionBridge.clearNativeHandlers(for: browser)
 		CEFBridge_CloseBrowser(browser)
 		ensureMessageLoop()

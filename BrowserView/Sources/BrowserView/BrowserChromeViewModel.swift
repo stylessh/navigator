@@ -36,6 +36,9 @@ public final class BrowserChromeViewModel {
 	private let sidebarPresentation: BrowserSidebarPresentation
 	public private(set) var hasPendingSidebarOpen = false
 	public var onPresentationChange: ((Bool, Bool) -> Void)?
+	/// When false, hovering the left window edge no longer reveals the sidebar.
+	/// The floating-toolbar chrome turns this off because it doesn't mount a sidebar.
+	public var isSidebarRevealEnabled = true
 	private var geometry: Geometry
 	private let workItemScheduler: WorkItemScheduler
 	private var cancelPendingSidebarOpenWorkItem: (() -> Void)?
@@ -95,6 +98,10 @@ public final class BrowserChromeViewModel {
 	}
 
 	public func handleMouseMovement(at point: CGPoint, in bounds: CGSize) {
+		guard isSidebarRevealEnabled else {
+			cancelPendingSidebarOpen()
+			return
+		}
 		guard bounds.width > 0,
 		      bounds.height > 0,
 		      point.x >= -geometry.resizeRevealDistance,
