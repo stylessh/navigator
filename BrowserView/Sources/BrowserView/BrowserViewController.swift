@@ -197,6 +197,15 @@ public final class BrowserViewController: NSViewController {
 		chromeView.hostedBrowser
 	}
 
+	/// Shows keyboard link hints over the selected tab (no-op when the experiment is off).
+	public func beginLinkHints(openInNewTab: Bool = false) {
+		chromeView.beginLinkHints(openInNewTab: openInNewTab)
+	}
+
+	public var isShowingLinkHints: Bool {
+		chromeView.isShowingLinkHints
+	}
+
 	public func updateSidebarWidth(_ width: CGFloat) {
 		currentSidebarWidth = width
 		browserChromeViewModel.updateSidebarWidth(width)
@@ -301,6 +310,20 @@ final class BrowserChromeView: NSView {
 	private var rendererManagedFrameTransportReadyTabIDs = Set<BrowserTabID>()
 	private var nextManagedCameraFrameSequence: UInt64 = 1
 	private var lastManagedCameraFrameDeliveryTime: TimeInterval?
+	private lazy var linkHintsController = BrowserLinkHintsController(
+		environment: .init(
+			evaluateJavaScript: { [weak self] browser, script, completion in
+				guard let self else { return }
+				self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { result, _ in
+					completion(result)
+				}
+			},
+			openURLInNewTab: { [weak self] url in
+				self?.sidebarViewModel.openNewTab(with: url, activate: false)
+			}
+		)
+	)
+	private var linkHintsExperimentObserver: BrowserLinkHintsExperimentObserver?
 
 	convenience init(
 		browserRuntime: any BrowserRuntimeDriving,
@@ -429,6 +452,9 @@ final class BrowserChromeView: NSView {
 		bindBrowserCameraSessionUpdates()
 		addChromeSubviews()
 		syncBrowserTabs()
+		linkHintsExperimentObserver = BrowserLinkHintsExperimentObserver { [weak self] _ in
+			self?.reinstallKeyboardNavigationScriptInAllBrowsers()
+		}
 	}
 
 	@available(*, unavailable)
@@ -1116,7 +1142,9 @@ final class BrowserChromeView: NSView {
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
+			self.bindPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
+			self.installKeyboardNavigationScript(for: browser)
 			self.syncNavigationState(for: hostedTab.id)
 			self.browserRuntime.noteBrowserActivity()
 		}
@@ -1156,6 +1184,7 @@ final class BrowserChromeView: NSView {
 			previousSelectedTabID = nil
 		}
 		guard let container = browserContainersByTabID.removeValue(forKey: tabID) else { return }
+		linkHintsController.cancelIfShowing(browser: container.browserRef)
 		browserProcessCameraScriptFallbackTabIDs.remove(tabID)
 		rendererCameraRoutingTransportReadyTabIDs.remove(tabID)
 		rendererManagedFrameTransportReadyTabIDs.remove(tabID)
@@ -1172,6 +1201,7 @@ final class BrowserChromeView: NSView {
 			activateCommittedTab(tabID)
 		}
 		updateContainerVisibility(for: tabID, selectionChanged: selectionChanged)
+		linkHintsController.cancelIfNotShowing(browser: browserContainersByTabID[tabID]?.browserRef)
 
 		guard let selectedContainer = browserContainersByTabID[tabID] else { return }
 		if tabLifecycleRecords[tabID]?.isCommitted == true {
@@ -1484,6 +1514,7 @@ final class BrowserChromeView: NSView {
 				)
 			}
 			self.sidebarViewModel.updateTabURL(url, for: tabID)
+			self.installKeyboardNavigationScript(for: browser)
 			self.restoreScrollStateIfNeeded(for: tabID)
 			self.syncNavigationState(for: tabID)
 		}
@@ -1507,6 +1538,7 @@ final class BrowserChromeView: NSView {
 			guard let self else { return }
 			guard self.lifecycleGeneration == lifecycleGeneration else { return }
 			self.sidebarViewModel.updateTabTitle(title, for: tabID)
+			self.installKeyboardNavigationScript(for: browser)
 			if let tab = self.tabViewModel(for: tabID),
 			   let historyUpdate = self.restoredHistoryCoordinator.handleTitleChange(title, for: tab) {
 				self.sidebarViewModel.updateTabSessionHistory(
@@ -1956,6 +1988,62 @@ final class BrowserChromeView: NSView {
 
 	private func tabViewModel(for tabID: BrowserTabID) -> BrowserTabViewModel? {
 		sidebarViewModel.tabs.first(where: { $0.id == tabID })
+	}
+
+	// MARK: Keyboard link hints
+
+	/// Shows link hints for the selected tab. Pressing it again while hints are up cancels.
+	func beginLinkHints(openInNewTab: Bool) {
+		guard let selectedTabID = sidebarViewModel.selectedTabID,
+		      let container = browserContainersByTabID[selectedTabID],
+		      let browser = container.browserRef
+		else {
+			return
+		}
+		linkHintsController.begin(browser: browser, hostView: container, openInNewTab: openInNewTab)
+	}
+
+	var isShowingLinkHints: Bool {
+		linkHintsController.isActive
+	}
+
+	private func bindPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.setPageCommandHandler(for: browser) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			self.handlePageCommand(command, tabID: tabID)
+		}
+	}
+
+	private func handlePageCommand(_ command: BrowserRuntimePageCommand, tabID: BrowserTabID) {
+		switch command.name {
+		case BrowserKeyboardNavigationJavaScript.showLinkHintsCommand:
+			// Only the visible tab can show hints; a background tab's key events are stale.
+			guard sidebarViewModel.selectedTabID == tabID else { return }
+			let openInNewTab = command.arguments[BrowserKeyboardNavigationJavaScript.openInNewTabArgument] == "true"
+			beginLinkHints(openInNewTab: openInNewTab)
+		default:
+			break
+		}
+	}
+
+	private func installKeyboardNavigationScript(for browser: CEFBridgeBrowserRef) {
+		let script = BrowserKeyboardNavigationJavaScript.makeInstallScript(
+			enabled: BrowserLinkHintsController.isExperimentEnabled
+		)
+		browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+	}
+
+	private func reinstallKeyboardNavigationScriptInAllBrowsers() {
+		if BrowserLinkHintsController.isExperimentEnabled == false {
+			linkHintsController.cancel()
+		}
+		for container in browserContainersByTabID.values {
+			guard let browser = container.browserRef else { continue }
+			installKeyboardNavigationScript(for: browser)
+		}
 	}
 
 	private func captureScrollStateIfNeeded(for tabID: BrowserTabID) {
