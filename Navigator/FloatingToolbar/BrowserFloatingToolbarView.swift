@@ -141,7 +141,9 @@ struct BrowserFloatingToolbarView: View {
 
 			if state.isExpanded {
 				ToolbarIconButton(
-					systemName: sidebarViewModel.isLoading ? "xmark" : "arrow.clockwise",
+					// Loading shows as the sheen under the pill; there's no stop action in the
+					// tab model yet, so the button always reloads and always says so.
+					systemName: "arrow.clockwise",
 					help: "Reload",
 					size: 26
 				) {
