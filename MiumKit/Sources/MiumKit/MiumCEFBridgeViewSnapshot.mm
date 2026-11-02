@@ -218,7 +218,9 @@ void finishCapture(MiumDevToolsCaptureState* state, CGImageRef image) {
   state->registration = nullptr;
   if (registration != nullptr) {
     // Releasing the registration unregisters the observer (CEF drops its observer ref).
-    releaseOwnedCefValue(registration);
+    if (registration->base.release != nullptr) {
+      registration->base.release(&registration->base);
+    }
   }
 }
 
