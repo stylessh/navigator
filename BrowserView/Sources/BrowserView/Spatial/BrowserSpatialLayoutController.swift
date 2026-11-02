@@ -315,7 +315,7 @@ final class BrowserSpatialLayoutController: NSObject {
 		let maxWidth = Self.snapshotMaxWidth * (hostView.window?.backingScaleFactor ?? 2) / 2
 		container.captureSpatialSnapshot { [weak self] image in
 			#if DEBUG
-				print("[Navigator][Spatial] page snapshot tab=\(tabID) result=\(image.map { "\($0.width)x\($0.height)" } ?? "nil")")
+				NSLog("[Navigator][Spatial] page snapshot tab=%@ result=%@", tabID.uuidString, image.map { "\($0.width)x\($0.height)" } ?? "nil")
 			#endif
 			guard let self, let image else { return }
 			self.snapshots[tabID] = Self.downscaled(image, maxWidth: maxWidth)

@@ -311,6 +311,8 @@ int CEFBridge_CapturePageSnapshot(
       return;
     }
     if (host->add_dev_tools_message_observer != nullptr && host->send_dev_tools_message != nullptr) {
+      // CEF C API: a struct passed as an argument transfers one reference to the callee.
+      captureAddRef(&state->observer.base);
       state->registration = host->add_dev_tools_message_observer(host, &state->observer);
       const std::string message =
         "{\"id\":" + std::to_string(state->messageId) +
