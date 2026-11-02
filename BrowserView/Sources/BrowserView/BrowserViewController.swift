@@ -303,7 +303,10 @@ final class BrowserChromeView: NSView {
 		get { siteTintSampling.store }
 		set { siteTintSampling.store = newValue }
 	}
-	private let browserContainerHost = NSView()
+	private lazy var spatialLayout = BrowserSpatialLayoutController(hooks: makeSpatialLayoutHooks())
+	private var browserContainerHost: BrowserSpatialHostView {
+		spatialLayout.hostView
+	}
 	private let tabHostViewModel = BrowserTabHostViewModel()
 	private var tabConfigurationChangeObserverID: UUID?
 	private var browserContainersByTabID = [BrowserTabID: BrowserContainerView]()
@@ -528,6 +531,7 @@ final class BrowserChromeView: NSView {
 		setupMouseMoveMonitor()
 		if window != nil {
 			linkPeekController.attach(hostView: browserContainerHost, overlayParent: self)
+			spatialLayout.attach(overlayParent: self)
 		}
 		if tabLifecycleConfiguration.isEnabled {
 			setupInteractionMonitor()
@@ -540,6 +544,7 @@ final class BrowserChromeView: NSView {
 		super.viewWillMove(toWindow: newWindow)
 		if newWindow == nil {
 			cleanupMonitors()
+			spatialLayout.detach()
 		}
 		else if newWindow !== window {
 			teardownWindowLifecycleObservers()
@@ -773,6 +778,7 @@ final class BrowserChromeView: NSView {
 			currentSelectedTabID = nil
 			previousSelectedTabID = nil
 		}
+		spatialLayout.tabsDidChange()
 	}
 
 	private func bindBrowserCameraSessionUpdates() {
@@ -1198,14 +1204,8 @@ final class BrowserChromeView: NSView {
 			self.syncNavigationState(for: hostedTab.id)
 		}
 		browserContainersByTabID[hostedTab.id] = container
-		browserContainerHost.addSubview(container)
-		container.translatesAutoresizingMaskIntoConstraints = false
-		NSLayoutConstraint.activate([
-			container.topAnchor.constraint(equalTo: browserContainerHost.topAnchor),
-			container.leadingAnchor.constraint(equalTo: browserContainerHost.leadingAnchor),
-			container.trailingAnchor.constraint(equalTo: browserContainerHost.trailingAnchor),
-			container.bottomAnchor.constraint(equalTo: browserContainerHost.bottomAnchor),
-		])
+		// Containers are frame-positioned by the spatial host so split panes can spring between layouts.
+		spatialLayout.registerContainer(container, for: hostedTab.id)
 	}
 
 	private func removeBrowserContainer(for tabID: BrowserTabID) {
@@ -1228,11 +1228,16 @@ final class BrowserChromeView: NSView {
 		rendererCameraRoutingTransportReadyTabIDs.remove(tabID)
 		rendererManagedFrameTransportReadyTabIDs.remove(tabID)
 		clearCameraConsumer(for: tabID)
+		spatialLayout.unregisterContainer(for: tabID)
 		container.removeFromSuperview()
 	}
 
 	private func applySelectedTab(_ tabID: BrowserTabID) {
 		let selectionChanged = currentSelectedTabID != tabID
+		if selectionChanged {
+			// Grab a thumbnail for the tab overview while the outgoing page is still on screen.
+			spatialLayout.selectionWillChange(from: currentSelectedTabID)
+		}
 		if tabLifecycleConfiguration.isEnabled {
 			handleSelectionChange(to: tabID)
 		}
@@ -1260,20 +1265,27 @@ final class BrowserChromeView: NSView {
 		}
 		siteTintSampling.tabSelected(tabID)
 		syncNavigationState(for: tabID)
+		spatialLayout.selectionDidChange()
 	}
 
 	private func updateContainerVisibility(for selectedTabID: BrowserTabID, selectionChanged: Bool) {
 		cancelVisibilityHandoff(hideRetainedTab: true)
 
-		let retainedTabID = retainedVisibilityHandoffTabID(for: selectedTabID, selectionChanged: selectionChanged)
-		let visibleTabIDs = Set([selectedTabID, retainedTabID].compactMap { $0 })
+		let splitPaneIDs = spatialLayout.visiblePaneIDs(selected: selectedTabID)
+		let retainedTabID = splitPaneIDs.isEmpty
+			? retainedVisibilityHandoffTabID(for: selectedTabID, selectionChanged: selectionChanged)
+			: nil
+		let visibleTabIDs = Set([selectedTabID, retainedTabID].compactMap { $0 }).union(splitPaneIDs)
 
 		for (candidateTabID, container) in browserContainersByTabID {
 			container.isHidden = visibleTabIDs.contains(candidateTabID) == false
 			container.layer?.zPosition = candidateTabID == retainedTabID ? 1 : 0
+			let isSplitPane = candidateTabID != selectedTabID && splitPaneIDs.contains(candidateTabID)
 			container.setBrowserCreationEnabled(
-				candidateTabID == selectedTabID &&
-					(tabLifecycleConfiguration.isEnabled == false || tabLifecycleRecords[candidateTabID]?.isCommitted == true)
+				isSplitPane || (
+					candidateTabID == selectedTabID &&
+						(tabLifecycleConfiguration.isEnabled == false || tabLifecycleRecords[candidateTabID]?.isCommitted == true)
+				)
 			)
 		}
 
@@ -2211,6 +2223,67 @@ final class BrowserChromeView: NSView {
 
 	override func hitTest(_ point: NSPoint) -> NSView? {
 		return super.hitTest(point)
+	}
+
+	// MARK: Spatial layouts (experimental)
+
+	private func makeSpatialLayoutHooks() -> BrowserSpatialLayoutHooks {
+		BrowserSpatialLayoutHooks(
+			tabs: { [weak self] in
+				self?.sidebarViewModel.tabs ?? []
+			},
+			selectedTabID: { [weak self] in
+				self?.sidebarViewModel.selectedTabID
+			},
+			container: { [weak self] tabID in
+				self?.browserContainersByTabID[tabID]
+			},
+			selectTab: { [weak self] tabID in
+				self?.sidebarViewModel.selectTab(id: tabID)
+			},
+			closeTab: { [weak self] tabID in
+				self?.sidebarViewModel.closeTab(id: tabID)
+			},
+			moveTab: { [weak self] tabID, targetID in
+				guard let self else { return }
+				let tabs = self.sidebarViewModel.tabs
+				guard let source = tabs.firstIndex(where: { $0.id == tabID }),
+				      let destination = tabs.firstIndex(where: { $0.id == targetID })
+				else { return }
+				self.sidebarViewModel.moveTabs(from: IndexSet(integer: source), to: destination)
+			},
+			setPaneLive: { [weak self] tabID, isLive in
+				self?.setSplitPaneLive(tabID, isLive: isLive)
+			},
+			refreshVisibility: { [weak self] in
+				guard let self, let selectedTabID = self.sidebarViewModel.selectedTabID else { return }
+				self.updateContainerVisibility(for: selectedTabID, selectionChanged: false)
+			}
+		)
+	}
+
+	/// Keeps a non-focused split pane's browser alive and on screen.
+	private func setSplitPaneLive(_ tabID: BrowserTabID, isLive: Bool) {
+		guard let container = browserContainersByTabID[tabID] else { return }
+		if isLive {
+			if var record = tabLifecycleRecords[tabID] {
+				record.intentState = .committed
+				record.lastSelectionGeneration = selectionGeneration
+				tabLifecycleRecords[tabID] = record
+			}
+			setProtection(true, reason: .splitPane, for: tabID)
+			container.isHidden = false
+			layoutSubtreeIfNeeded()
+			beginProvisionalNavigationIfNeeded(for: tabID)
+			container.setBrowserCreationEnabled(true)
+			container.createBrowserIfNeeded()
+			if let browser = container.browserRef {
+				installBrowserCameraRoutingScript(for: browser, tabID: tabID)
+			}
+		}
+		else {
+			setProtection(false, reason: .splitPane, for: tabID)
+		}
 	}
 }
 

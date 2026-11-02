@@ -33,6 +33,8 @@ public extension NavigatorExperiment {
 		.linkHints,
 		.commandBar,
 		.developerOverlay,
+		.spatialTabOverview,
+		.spatialSplitPanes,
 	]
 
 	static let floatingToolbarAutoHide = NavigatorExperiment(
