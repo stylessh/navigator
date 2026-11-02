@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="theme-color" content="#e11d48">
+<title>Site tint test</title>
+<style>body{font:16px -apple-system;margin:40px} button{font:inherit;margin:4px}</style>
+<h1>Site tint test</h1>
+<p>The toolbar should be rose-tinted. The buttons change the theme-color live (the tint follows on the next title change or re-sample).</p>
+<script>
+function setTheme(c){document.querySelector('meta[name=theme-color]').content=c;document.title='Site tint '+c;}
+</script>
+<button onclick="setTheme('#2563eb')">Blue</button>
+<button onclick="setTheme('#16a34a')">Green</button>
+<button onclick="setTheme('#f59e0b')">Amber</button>
+<button onclick="setTheme('#7c3aed')">Violet</button>
+<button onclick="setTheme('#ffffff')">White (neutral)</button>
