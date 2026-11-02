@@ -8,6 +8,7 @@ extension BrowserRootViewController {
 	private static let zapKeyCode: UInt16 = 6 // Z
 	private static let customizeKeyCode: UInt16 = 11 // B
 	private static let copyCleanLinkKeyCode: UInt16 = 8 // C
+	private static let escapeKeyCode: UInt16 = 53
 
 	func configureSiteCustomization() {
 		let customization = browserViewController.siteCustomization
@@ -50,9 +51,15 @@ extension BrowserRootViewController {
 		modifiers: NSEvent.ModifierFlags,
 		windowNumber: Int
 	) -> Bool {
+		let customization = browserViewController.siteCustomization
+		// Escape closes the customization panel, unless the zap picker (which uses Escape itself) is running.
+		if keyCode == Self.escapeKeyCode, modifiers.isEmpty,
+		   customization.isCustomizationPanelVisible, customization.isZapPickerActive == false {
+			customization.dismissCustomizationPanel()
+			return true
+		}
 		guard windowNumber == view.window?.windowNumber else { return false }
 		guard modifiers == [.command, .option] else { return false }
-		let customization = browserViewController.siteCustomization
 		switch keyCode {
 		case Self.zapKeyCode:
 			customization.startZapPicker()

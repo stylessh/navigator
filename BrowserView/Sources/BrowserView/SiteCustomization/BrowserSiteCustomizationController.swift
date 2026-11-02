@@ -274,6 +274,21 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 		panelController = controller
 	}
 
+	public var isCustomizationPanelVisible: Bool {
+		panelController?.isVisible == true
+	}
+
+	public var isZapPickerActive: Bool {
+		pickerURL != nil
+	}
+
+	/// The panel never takes key focus from the page by itself, so the app routes Escape here.
+	public func dismissCustomizationPanel() {
+		guard let panelController else { return }
+		panelController.dismiss()
+		self.panelController = nil
+	}
+
 	public func toggleCustomizationPanel() {
 		presentCustomizationPanel()
 	}

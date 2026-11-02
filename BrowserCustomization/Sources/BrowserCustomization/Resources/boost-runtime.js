@@ -172,7 +172,8 @@
       ".tag{position:fixed;font:600 11px -apple-system,system-ui;color:#fff;background:" + color + ";" +
       "padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis;" +
       "transition:all .18s cubic-bezier(.2,1.3,.4,1);pointer-events:none}" +
-      ".hint{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);font:500 12px -apple-system,system-ui;" +
+      // Top-center: the floating toolbar owns the bottom edge of the window.
+      ".hint{position:fixed;left:50%;top:18px;transform:translateX(-50%);font:500 12px -apple-system,system-ui;" +
       "color:#fff;background:rgba(20,20,22,.78);backdrop-filter:blur(20px);padding:8px 14px;border-radius:999px}" +
       "</style><div class=box></div><div class=tag></div>" +
       "<div class=hint>Click to hide · ↑ widen · ↓ narrow · Esc to cancel</div>";
