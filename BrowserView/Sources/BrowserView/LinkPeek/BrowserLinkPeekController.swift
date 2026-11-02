@@ -21,10 +21,24 @@ final class BrowserLinkPeekController {
 		var isEnabled: @MainActor () -> Bool
 	}
 
+	/// Navigator's motion tokens (docs/browser/motion.md) as Core Animation springs.
 	private enum Spring {
-		static let present = (mass: CGFloat(1), stiffness: CGFloat(260), damping: CGFloat(24))
-		static let settle = (mass: CGFloat(1), stiffness: CGFloat(380), damping: CGFloat(30))
-		static let promote = (mass: CGFloat(1), stiffness: CGFloat(300), damping: CGFloat(32))
+		typealias Parameters = (mass: CGFloat, stiffness: CGFloat, damping: CGFloat)
+
+		/// SwiftUI-style `response` / `dampingFraction` to mass-spring-damper values.
+		static func make(response: CGFloat, dampingFraction: CGFloat) -> Parameters {
+			let omega = 2 * CGFloat.pi / response
+			return (1, omega * omega, 2 * dampingFraction * omega)
+		}
+
+		/// Token: morph. The card rising out of the link.
+		static let present = make(response: 0.4, dampingFraction: 0.82)
+		/// Token: snappy. Settling back after a drag, the page receding.
+		static let settle = make(response: 0.3, dampingFraction: 0.86)
+		/// Token: exit. Dismissal: quick, no bounce.
+		static let exit = make(response: 0.26, dampingFraction: 1)
+		/// Growing into a full tab: slightly slower than exit so the hand-off reads.
+		static let promote = make(response: 0.36, dampingFraction: 0.92)
 	}
 
 	private enum TransformKey {
@@ -377,9 +391,9 @@ final class BrowserLinkPeekController {
 			translation: CGPoint(x: 0, y: -60),
 			size: card.bounds.size
 		)
-		let duration = spring(cardLayer, to: end, from: current, velocity: 0, parameters: Spring.settle)
-		fade(cardLayer, to: 0, from: Float(cardLayer.presentation()?.opacity ?? 1), duration: 0.16, key: TransformKey.opacity)
-		overlay.setBackdropOpacity(0, animatedFrom: Self.backdropOpacity, duration: 0.2)
+		let duration = spring(cardLayer, to: end, from: current, velocity: 0, parameters: Spring.exit)
+		fade(cardLayer, to: 0, from: Float(cardLayer.presentation()?.opacity ?? 1), duration: 0.2, key: TransformKey.opacity)
+		overlay.setBackdropOpacity(0, animatedFrom: overlay.presentedBackdropOpacity, duration: 0.22)
 		scheduleTearDown(after: min(duration, 0.35))
 	}
 
@@ -401,7 +415,7 @@ final class BrowserLinkPeekController {
 			velocity: velocity / distance,
 			parameters: Spring.promote
 		)
-		overlay.setBackdropOpacity(0, animatedFrom: Self.backdropOpacity, duration: 0.2)
+		overlay.setBackdropOpacity(0, animatedFrom: overlay.presentedBackdropOpacity, duration: 0.22)
 		setPageReceded(false)
 
 		if let url {
@@ -484,7 +498,14 @@ final class BrowserLinkPeekController {
 				let current = cardLayer.transform
 				let distance = max(1, abs(translation.y))
 				spring(cardLayer, to: CATransform3DIdentity, from: current, velocity: -velocity.y / distance, parameters: Spring.settle)
-				overlayView?.setBackdropOpacity(Self.backdropOpacity)
+				// Ease the dim back in from wherever the drag left it, instead of snapping.
+				if let overlayView {
+					overlayView.setBackdropOpacity(
+						Self.backdropOpacity,
+						animatedFrom: overlayView.presentedBackdropOpacity,
+						duration: 0.22
+					)
+				}
 			}
 		}
 	}
@@ -578,12 +599,21 @@ final class BrowserLinkPeekOverlayView: NSView {
 	/// Keep the page underneath from scrolling while the card is up.
 	override func scrollWheel(with event: NSEvent) {}
 
+	/// The dim as it is on screen right now, mid-animation included.
+	var presentedBackdropOpacity: Float {
+		backdropLayer.presentation()?.opacity ?? backdropLayer.opacity
+	}
+
 	func setBackdropOpacity(_ opacity: Float, animatedFrom start: Float? = nil, duration: TimeInterval = 0) {
 		CATransaction.begin()
 		CATransaction.setDisableActions(true)
 		backdropLayer.opacity = opacity
 		CATransaction.commit()
-		guard let start, duration > 0 else { return }
+		guard let start, duration > 0 else {
+			// A direct set (e.g. while dragging) must win over an entrance fade still running.
+			backdropLayer.removeAnimation(forKey: "navigator.linkPeek.backdrop")
+			return
+		}
 		let animation = CABasicAnimation(keyPath: "opacity")
 		animation.fromValue = start
 		animation.toValue = opacity

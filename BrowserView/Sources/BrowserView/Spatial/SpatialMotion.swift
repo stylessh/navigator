@@ -2,17 +2,18 @@ import AppKit
 import QuartzCore
 import Vendors
 
-/// Shared spring vocabulary for the spatial layout experiments.
+/// Shared spring vocabulary for the spatial layout experiments, using Navigator's motion tokens
+/// (docs/browser/motion.md) so the overview moves like the toolbar and command bar.
 @MainActor
 enum SpatialMotion {
-	/// Overview zoom in/out: fast but with a hint of overshoot.
-	static let zoom = Spring(dampingRatio: 0.84, response: 0.42)
-	/// Grid reflow when cards are added, removed or filtered.
-	static let reflow = Spring(dampingRatio: 0.9, response: 0.34)
-	/// Hover lift and press feedback.
-	static let lift = Spring(dampingRatio: 0.7, response: 0.26)
-	/// Panes settling into a new split.
-	static let split = Spring(dampingRatio: 0.82, response: 0.38)
+	/// Overview zoom in/out (token: morph).
+	static let zoom = Spring(dampingRatio: 0.82, response: 0.4)
+	/// Grid reflow when cards are added, removed or filtered (token: reflow).
+	static let reflow = Spring(dampingRatio: 0.9, response: 0.32)
+	/// Hover lift and press feedback (between snappy and press: a little give, no wobble).
+	static let lift = Spring(dampingRatio: 0.76, response: 0.24)
+	/// Panes settling into a new split (token: morph).
+	static let split = Spring(dampingRatio: 0.82, response: 0.4)
 	/// Drop zone highlight following the cursor.
 	static let highlight = Spring(dampingRatio: 1, response: 0.18)
 

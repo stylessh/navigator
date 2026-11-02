@@ -13,6 +13,8 @@ struct DeveloperOverlayRootView: View {
 
 	@Namespace private var glassNamespace
 	@State private var isViewportShelfPresented = false
+	/// The page theme color the glass shows; trails `model.pageThemeColor` with the tint spring.
+	@State private var shownThemeColor: String?
 
 	init(model: DeveloperOverlayModel, hitRegions: DeveloperOverlayHitRegions, bottomInset: CGFloat = 84) {
 		self.model = model
@@ -38,7 +40,7 @@ struct DeveloperOverlayRootView: View {
 								.frame(height: 28)
 								.developerGlass(in: Capsule())
 								.developerGlassID("toast", in: glassNamespace)
-								.transition(.scale(scale: 0.6, anchor: .top).combined(with: .opacity))
+								.developerGlassTransition(fallback: .scale(scale: 0.6, anchor: .top).combined(with: .opacity))
 								.allowsHitTesting(false)
 						}
 
@@ -49,7 +51,7 @@ struct DeveloperOverlayRootView: View {
 							.developerGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 							.developerGlassID("shelf", in: glassNamespace)
 							.developerHitRegion("shelf")
-							.transition(.scale(scale: 0.85, anchor: .topTrailing).combined(with: .opacity))
+							.developerGlassTransition(fallback: .scale(scale: 0.85, anchor: .topTrailing).combined(with: .opacity))
 						}
 
 						if model.isPanelPresented {
@@ -59,8 +61,8 @@ struct DeveloperOverlayRootView: View {
 									.developerGlass(in: RoundedRectangle(cornerRadius: 22, style: .continuous), tint: themeTint)
 								.developerGlassID("panel", in: glassNamespace)
 								.developerHitRegion("panel")
-								.transition(
-									.asymmetric(
+								.developerGlassTransition(
+									fallback: .asymmetric(
 										insertion: .scale(scale: 0.92, anchor: .topTrailing)
 											.combined(with: .opacity)
 											.combined(with: .offset(x: 24)),
@@ -94,12 +96,21 @@ struct DeveloperOverlayRootView: View {
 		.animation(DeveloperMotion.morph, value: model.isEnabled)
 		.animation(DeveloperMotion.morph, value: model.viewportMode)
 		.animation(DeveloperMotion.morph, value: model.transientMessage)
-		.animation(.easeInOut(duration: 0.6), value: model.pageThemeColor)
+		// The theme color springs in its own transaction. A root-level
+		// `.animation(.easeInOut(duration: 0.6), value: pageThemeColor)` also eased every other
+		// change in the same page update (panel rows, the HUD) with a slow linear-ish curve.
+		.onChange(of: model.pageThemeColor, initial: true) { oldValue, newValue in
+			guard oldValue != newValue else {
+				shownThemeColor = newValue
+				return
+			}
+			withAnimation(DeveloperMotion.tint) { shownThemeColor = newValue }
+		}
 	}
 
 	/// Like Arc's per-site chrome: a whisper of the page's own color in the glass. Grays don't tint.
 	private var themeTint: Color? {
-		model.pageThemeColor.flatMap(DeveloperFormat.tint(fromCSS:))
+		shownThemeColor.flatMap(DeveloperFormat.tint(fromCSS:))
 	}
 
 	private var hud: some View {

@@ -50,10 +50,17 @@ public extension View {
 	}
 }
 
-/// The spring every customization surface uses, so motion feels like one system.
+/// The springs every customization surface uses, so motion feels like one system. Same values
+/// as Navigator's motion tokens (docs/browser/motion.md).
 public extension Animation {
-	static let navigatorSnappy = Animation.spring(response: 0.32, dampingFraction: 0.78)
-	static let navigatorBouncy = Animation.spring(response: 0.42, dampingFraction: 0.62)
+	/// Token: snappy. Hover, selection and small state changes.
+	static let navigatorSnappy = Animation.spring(response: 0.24, dampingFraction: 0.86)
+	/// Token: morph. Panels appearing and sections opening.
+	static let navigatorBouncy = Animation.spring(response: 0.4, dampingFraction: 0.82)
+	/// Token: press. Button press-down.
+	static let navigatorPress = Animation.spring(response: 0.18, dampingFraction: 0.64)
+	/// Token: exit. Dismissals: quicker than the entrance and no bounce.
+	static let navigatorExit = Animation.spring(response: 0.22, dampingFraction: 1)
 }
 
 /// Presses scale down with a spring, like a physical button.
@@ -63,6 +70,6 @@ public struct SpringPressStyle: ButtonStyle {
 	public func makeBody(configuration: Configuration) -> some View {
 		configuration.label
 			.scaleEffect(configuration.isPressed ? 0.94 : 1)
-			.animation(.navigatorBouncy, value: configuration.isPressed)
+			.animation(.navigatorPress, value: configuration.isPressed)
 	}
 }

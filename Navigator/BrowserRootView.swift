@@ -193,14 +193,17 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 
 	private func buildFloatingToolbar() {
 		let hostView = BrowserFloatingToolbarHostView(rootView: makeFloatingToolbarView())
+		let toolbarState = floatingToolbarState
+		hostView.interactiveRect = { toolbarState.interactiveFrame }
 		view.addSubview(hostView)
 		floatingToolbarHostView = hostView
 
+		// A fixed canvas: the toolbar springs inside it, so the NSView never resizes mid-morph.
 		NSLayoutConstraint.activate([
-			hostView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+			hostView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+			hostView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
 			hostView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-			hostView.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor),
-			hostView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor),
+			hostView.heightAnchor.constraint(equalToConstant: BrowserFloatingToolbarHostView.canvasHeight),
 		])
 	}
 

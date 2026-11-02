@@ -331,14 +331,24 @@ final class BrowserSpatialLayoutController: NSObject {
 				NSLog("[Navigator][Spatial] page snapshot tab=%@ result=%@", tabID.uuidString, image.map { "\($0.width)x\($0.height)" } ?? "nil")
 			#endif
 			guard let self, let image else { return }
-			self.snapshots[tabID] = Self.downscaled(image, maxWidth: maxWidth)
-			if let overview = self.overview, overview.isDismissing == false {
-				overview.refreshContent(self.overviewItems())
+			// Downscale off the main thread: a full-window Retina capture takes long enough to
+			// redraw that doing it here dropped frames from the overview's zoom-in spring,
+			// which is exactly when snapshots arrive.
+			let captured = SendableImage(image)
+			Task { @MainActor [weak self] in
+				let scaled = await Task.detached(priority: .userInitiated) {
+					SendableImage(BrowserSpatialLayoutController.downscaled(captured.image, maxWidth: maxWidth))
+				}.value.image
+				guard let self else { return }
+				self.snapshots[tabID] = scaled
+				if let overview = self.overview, overview.isDismissing == false {
+					overview.refreshContent(self.overviewItems())
+				}
 			}
 		}
 	}
 
-	private static func downscaled(_ image: CGImage, maxWidth: CGFloat) -> CGImage {
+	nonisolated private static func downscaled(_ image: CGImage, maxWidth: CGFloat) -> CGImage {
 		let width = CGFloat(image.width)
 		guard width > maxWidth, maxWidth > 0 else { return image }
 		let scale = maxWidth / width
@@ -501,5 +511,13 @@ extension BrowserSpatialLayoutController: SpatialTabOverviewViewDelegate {
 		overview?.removeFromSuperview()
 		overview = nil
 		hostView.window?.makeFirstResponder(hooks.selectedTabID().flatMap { hooks.container($0) })
+	}
+}
+
+/// CGImage is immutable and thread-safe; this lets one cross the detached downscale task.
+private struct SendableImage: @unchecked Sendable {
+	let image: CGImage
+	init(_ image: CGImage) {
+		self.image = image
 	}
 }

@@ -19,11 +19,13 @@ public enum BrowserSiteTintStyle {
 	public static let glassWashOpacity: Double = 0.4
 	/// Opacity of the window background tint behind web content.
 	public static let windowWashOpacity: Double = 0.55
-	/// One spring for every tint transition so toolbar and window move together.
-	public static let animation: Animation = .spring(response: 0.55, dampingFraction: 0.86)
+	/// One spring for every tint transition so toolbar and window move together. Critically
+	/// damped: an underdamped spring on a color overshoots past the target hue and back.
+	public static let animation: Animation = .spring(response: 0.55, dampingFraction: 1)
+	/// The same spring for Core Animation: stiffness (2π / response)², damping 4π·ζ / response.
 	public static let springMass: CGFloat = 1
-	public static let springStiffness: CGFloat = 130
-	public static let springDamping: CGFloat = 19.6
+	public static let springStiffness: CGFloat = 130.5
+	public static let springDamping: CGFloat = 22.85
 }
 
 private struct BrowserSiteTintEnvironmentKey: EnvironmentKey {

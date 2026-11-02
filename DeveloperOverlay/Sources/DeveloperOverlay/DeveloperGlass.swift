@@ -33,6 +33,21 @@ public extension View {
 		}
 	}
 
+	/// Insertion/removal for glass inside a `DeveloperGlassContainer`. On macOS 26 the glass
+	/// morphs out of its neighbours (`glassEffectTransition(.matchedGeometry)`) with a plain
+	/// fade for the content; a scale transition on top fought that morph and read as a pinch.
+	/// macOS 15 keeps `fallback`.
+	@ViewBuilder
+	func developerGlassTransition(fallback: AnyTransition) -> some View {
+		if #available(macOS 26.0, *) {
+			glassEffectTransition(.matchedGeometry)
+				.transition(.opacity)
+		}
+		else {
+			transition(fallback)
+		}
+	}
+
 	@ViewBuilder
 	func developerGlassID(_ id: some Hashable & Sendable, in namespace: Namespace.ID) -> some View {
 		if #available(macOS 26.0, *) {
@@ -67,13 +82,20 @@ struct DeveloperGlassContainer<Content: View>: View {
 	}
 }
 
-/// Spring curves shared by every overlay interaction (same values as the floating toolbar).
+/// Spring curves shared by every overlay interaction. Navigator's motion tokens
+/// (docs/browser/motion.md), the same values as the floating toolbar.
 @MainActor
 public enum DeveloperMotion {
-	public static let morph = Animation.spring(response: 0.42, dampingFraction: 0.78)
-	public static let snappy = Animation.spring(response: 0.26, dampingFraction: 0.82)
-	public static let press = Animation.spring(response: 0.2, dampingFraction: 0.58)
-	public static let rows = Animation.spring(response: 0.34, dampingFraction: 0.86)
+	/// Token: morph. Panels, shelves and the HUD changing shape.
+	public static let morph = Animation.spring(response: 0.4, dampingFraction: 0.82)
+	/// Token: snappy. Hover, selection, tab switches.
+	public static let snappy = Animation.spring(response: 0.24, dampingFraction: 0.86)
+	/// Token: press. Button press-down.
+	public static let press = Animation.spring(response: 0.18, dampingFraction: 0.64)
+	/// Token: reflow. Log and network rows streaming in.
+	public static let rows = Animation.spring(response: 0.32, dampingFraction: 0.9)
+	/// Token: tint. Page theme color in the glass; critically damped so colors don't overshoot.
+	public static let tint = Animation.spring(response: 0.55, dampingFraction: 1)
 }
 
 // MARK: - Hit regions
