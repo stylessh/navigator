@@ -1,4 +1,5 @@
 import BrowserSidebar
+import BrowserView
 import SwiftUI
 
 struct BrowserFloatingToolbarActions {
@@ -42,6 +43,8 @@ struct BrowserFloatingToolbarView: View {
 	let sidebarViewModel: BrowserSidebarViewModel
 	let state: BrowserFloatingToolbarState
 	let actions: BrowserFloatingToolbarActions
+	/// Selected page's tint for the glass; nil keeps stock glass.
+	var siteTintStore: BrowserSiteTintStore?
 
 	@Namespace private var glassNamespace
 	@State private var isHoveringAddress = false
@@ -72,6 +75,7 @@ struct BrowserFloatingToolbarView: View {
 		.animation(FloatingMotion.morph, value: state.isTabShelfPresented)
 		.animation(FloatingMotion.snappy, value: sidebarViewModel.selectedTabID)
 		.animation(FloatingMotion.snappy, value: sidebarViewModel.tabs.count)
+		.environment(\.browserSiteTint, siteTintStore?.currentTint)
 	}
 
 	// MARK: - Bar

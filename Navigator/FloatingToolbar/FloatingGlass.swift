@@ -1,3 +1,4 @@
+import BrowserView
 import SwiftUI
 
 /// Liquid Glass helpers for the floating chrome.
@@ -7,29 +8,15 @@ import SwiftUI
 /// material with a hairline stroke and soft shadow so the layout and motion stay identical.
 extension View {
 	/// Renders `self` on a glass surface clipped to `shape`.
-	@ViewBuilder
+	///
+	/// When `tint` is nil the glass picks up the selected page's color from `\.browserSiteTint`
+	/// (the "Tint chrome to match each site" experiment), cross-fading with a spring.
 	func floatingGlass(
 		in shape: some Shape = Capsule(),
 		tint: Color? = nil,
 		interactive: Bool = false
 	) -> some View {
-		if #available(macOS 26.0, *) {
-			glassEffect(FloatingGlassResolver.glass(tint: tint, interactive: interactive), in: shape)
-		}
-		else {
-			background {
-				ZStack {
-					shape.fill(.regularMaterial)
-					if let tint {
-						shape.fill(tint.opacity(0.18))
-					}
-				}
-				.shadow(color: .black.opacity(0.18), radius: 14, y: 6)
-			}
-			.overlay {
-				shape.stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-			}
-		}
+		modifier(FloatingGlassModifier(shape: shape, tint: tint, interactive: interactive))
 	}
 
 	/// Gives a glass shape a stable identity so it morphs (instead of cross-fading) when it
@@ -41,6 +28,51 @@ extension View {
 		}
 		else {
 			self
+		}
+	}
+}
+
+private struct FloatingGlassModifier<S: Shape>: ViewModifier {
+	@Environment(\.browserSiteTint) private var siteTint
+	let shape: S
+	let tint: Color?
+	let interactive: Bool
+
+	private var resolvedTint: Color? {
+		if let tint { return tint }
+		let opacity: Double
+		if #available(macOS 26.0, *) {
+			opacity = BrowserSiteTintStyle.glassTintOpacity
+		}
+		else {
+			opacity = BrowserSiteTintStyle.glassWashOpacity
+		}
+		return siteTint.map { $0.color.swiftUIColor.opacity(opacity) }
+	}
+
+	func body(content: Content) -> some View {
+		glass(content, tint: resolvedTint)
+			.animation(BrowserSiteTintStyle.animation, value: siteTint)
+	}
+
+	@ViewBuilder
+	private func glass(_ content: Content, tint: Color?) -> some View {
+		if #available(macOS 26.0, *) {
+			content.glassEffect(FloatingGlassResolver.glass(tint: tint, interactive: interactive), in: shape)
+		}
+		else {
+			content
+				.background {
+					ZStack {
+						shape.fill(.regularMaterial)
+						// Explicit tints keep the original light wash; the site tint is pre-faded.
+						shape.fill(self.tint.map { $0.opacity(0.18) } ?? tint ?? .clear)
+					}
+					.shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+				}
+				.overlay {
+					shape.stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+				}
 		}
 	}
 }

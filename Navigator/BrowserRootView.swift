@@ -26,6 +26,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var didApplyDebugURLs = false
 	private static let floatingToolbarRevealDistance: CGFloat = 96
 	private static let windowButtonsRevealSize = CGSize(width: 120, height: 44)
+	private var windowSiteTint: BrowserWindowSiteTint?
 	private static let sidebarOuterPadding: CGFloat = 10
 	private static let sidebarVisibleInset: CGFloat = 5
 	private static let toastTitleFontSize: CGFloat = 14
@@ -123,6 +124,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	}
 
 	private func buildComposition() {
+		windowSiteTint = BrowserWindowSiteTint(view: view, store: browserViewController.siteTintStore)
 		addChild(browserViewController)
 		let browserView = browserViewController.view
 		browserView.translatesAutoresizingMaskIntoConstraints = false
@@ -178,7 +180,8 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 				openNewTab: { appViewModel.presentNewTabActionBar() },
 				selectTab: { tabID in sidebarViewModel.selectTab(id: tabID) },
 				closeTab: { tabID in sidebarViewModel.closeTab(id: tabID) }
-			)
+			),
+			siteTintStore: browserViewController.siteTintStore
 		)
 	}
 
@@ -571,6 +574,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		let appearance = view.effectiveAppearance
 		let resolvedBackgroundColor = WindowChromeStyler.resolvedBackgroundColor(for: appearance)
 		view.layer?.backgroundColor = resolvedBackgroundColor.cgColor
+		windowSiteTint?.appearanceChanged()
 		if let window = view.window {
 			WindowChromeStyler.applyResolvedColors(to: window)
 		}
