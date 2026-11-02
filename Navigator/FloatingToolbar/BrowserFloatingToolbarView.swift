@@ -29,7 +29,11 @@ struct BrowserFloatingToolbarView: View {
 	private enum Metrics {
 		static let barHeight: CGFloat = 40
 		static let compactHeight: CGFloat = 32
-		static let clusterSpacing: CGFloat = 8
+		static let clusterSpacing: CGFloat = 10
+		/// Glass shapes closer than this blend together. Kept below `clusterSpacing` so the
+		/// groups read as separate pills at rest and only melt into each other mid-morph.
+		static let glassMergeDistance: CGFloat = 4
+		static let shelfEdgeFade: CGFloat = 18
 		static let addressMinWidth: CGFloat = 260
 		static let addressMaxWidth: CGFloat = 380
 		static let compactAddressWidth: CGFloat = 200
@@ -47,7 +51,7 @@ struct BrowserFloatingToolbarView: View {
 	@State private var isHoveringAddress = false
 
 	var body: some View {
-		FloatingGlassContainer(spacing: Metrics.clusterSpacing + 6) {
+		FloatingGlassContainer(spacing: Metrics.glassMergeDistance) {
 			VStack(spacing: 10) {
 				if state.isTabShelfPresented {
 					tabShelf
@@ -229,6 +233,22 @@ struct BrowserFloatingToolbarView: View {
 				.padding(.horizontal, 6)
 			}
 			.frame(width: min(contentWidth, Metrics.shelfMaxWidth), height: Metrics.shelfHeight)
+			.mask {
+				// Fade chips into the glass at the edges when the shelf overflows, so a clipped
+				// chip reads as "scroll for more" rather than a cut-off.
+				if contentWidth > Metrics.shelfMaxWidth {
+					HStack(spacing: 0) {
+						LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+							.frame(width: Metrics.shelfEdgeFade)
+						Rectangle()
+						LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+							.frame(width: Metrics.shelfEdgeFade)
+					}
+				}
+				else {
+					Rectangle()
+				}
+			}
 			.onAppear {
 				if let selectedID = sidebarViewModel.selectedTabID {
 					proxy.scrollTo(selectedID, anchor: .center)
@@ -328,7 +348,7 @@ private struct FloatingPressButtonBody: View {
 
 	var body: some View {
 		configuration.label
-			.foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.5))
+			.foregroundStyle(isEnabled ? Color.primary : Color.primary.opacity(0.32))
 			.background {
 				Circle()
 					.fill(Color.primary.opacity(highlightOpacity))
