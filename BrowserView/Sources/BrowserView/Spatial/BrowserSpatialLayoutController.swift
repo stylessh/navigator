@@ -340,12 +340,13 @@ final class BrowserSpatialLayoutController: NSObject {
 
 	private func installEventMonitor() {
 		guard eventMonitor == nil else { return }
-		eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .keyDown, .leftMouseDown]) { [weak self] event in
+		// Local monitors run on the main thread; the closure is formed in a main-actor context,
+		// matching how BrowserChromeView installs its own monitors.
+		let handler: (NSEvent) -> NSEvent? = { [weak self] event in
 			guard let self else { return event }
-			return MainActor.assumeIsolated {
-				self.handle(event)
-			}
+			return self.handle(event)
 		}
+		eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .keyDown, .leftMouseDown], handler: handler)
 	}
 
 	private func handle(_ event: NSEvent) -> NSEvent? {
