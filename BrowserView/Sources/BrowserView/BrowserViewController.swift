@@ -1139,7 +1139,7 @@ final class BrowserChromeView: NSView {
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
-			self.bindPageCommandHandler(for: browser, tabID: hostedTab.id)
+			self.bindLinkHintsPageCommands(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
 			self.installKeyboardNavigationScript(for: browser)
 			self.syncNavigationState(for: hostedTab.id)
@@ -2004,17 +2004,24 @@ final class BrowserChromeView: NSView {
 		linkHintsController.isActive
 	}
 
-	private func bindPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+	private func bindLinkHintsPageCommands(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
 		let lifecycleGeneration = self.lifecycleGeneration
-		browserRuntime.setPageCommandHandler(for: browser) { [weak self] command in
-			guard let self else { return }
-			guard self.lifecycleGeneration == lifecycleGeneration else { return }
-			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
-			self.handlePageCommand(command, tabID: tabID, browser: browser)
+		let names = [
+			BrowserKeyboardNavigationJavaScript.showLinkHintsCommand,
+			BrowserKeyboardNavigationJavaScript.targetsCommand,
+			BrowserKeyboardNavigationJavaScript.openURLCommand,
+		]
+		for name in names {
+			browserRuntime.addPageCommandHandler(for: browser, name: name) { [weak self] command in
+				guard let self else { return }
+				guard self.lifecycleGeneration == lifecycleGeneration else { return }
+				guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+				self.handleLinkHintsPageCommand(command, tabID: tabID, browser: browser)
+			}
 		}
 	}
 
-	private func handlePageCommand(
+	private func handleLinkHintsPageCommand(
 		_ command: BrowserRuntimePageCommand,
 		tabID: BrowserTabID,
 		browser: CEFBridgeBrowserRef
@@ -2022,15 +2029,11 @@ final class BrowserChromeView: NSView {
 		if linkHintsController.handlePageCommand(command, from: browser) {
 			return
 		}
-		switch command.name {
-		case BrowserKeyboardNavigationJavaScript.showLinkHintsCommand:
-			// Only the visible tab can show hints; a background tab's key events are stale.
-			guard sidebarViewModel.selectedTabID == tabID else { return }
-			let openInNewTab = command.arguments[BrowserKeyboardNavigationJavaScript.openInNewTabArgument] == "true"
-			beginLinkHints(openInNewTab: openInNewTab)
-		default:
-			break
-		}
+		guard command.name == BrowserKeyboardNavigationJavaScript.showLinkHintsCommand else { return }
+		// Only the visible tab can show hints; a background tab's key events are stale.
+		guard sidebarViewModel.selectedTabID == tabID else { return }
+		let openInNewTab = command.arguments[BrowserKeyboardNavigationJavaScript.openInNewTabArgument] == "true"
+		beginLinkHints(openInNewTab: openInNewTab)
 	}
 
 	private func installKeyboardNavigationScript(for browser: CEFBridgeBrowserRef) {
