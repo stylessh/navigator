@@ -147,6 +147,9 @@ public final class DeveloperOverlayModel {
 	@ObservationIgnored private var pageIdentity: AnyHashable?
 	@ObservationIgnored private var pollTask: Task<Void, Never>?
 	@ObservationIgnored private var isPollInFlight = false
+	/// Set when `pollNow()` lands while a poll is running: that poll may have drained the page just
+	/// before the change we care about (a picked element, an eval's logs), so poll again right after.
+	@ObservationIgnored private var isPollRequeued = false
 	@ObservationIgnored private var localSequence = 0
 	@ObservationIgnored private var hasInstalledInCurrentDocument = false
 
@@ -259,7 +262,11 @@ public final class DeveloperOverlayModel {
 
 	/// Inspects the first element matching a CSS selector (scripting / automation).
 	public func inspect(selector: String) {
-		run(DeveloperOverlayAgentScript.inspect(selector: selector))
+		bridge.evaluate(DeveloperOverlayAgentScript.inspect(selector: selector)) { [weak self] result, error in
+			guard let self else { return }
+			self.onPollDiagnostic?("inspect \(selector) -> \(result ?? "nil") error=\(error ?? "-")")
+			self.pollNow()
+		}
 	}
 
 	/// Runs arbitrary script in the page without logging it (automation hooks such as navigation).
@@ -360,7 +367,10 @@ public final class DeveloperOverlayModel {
 	}
 
 	func pollOnce() async {
-		guard isPollInFlight == false else { return }
+		guard isPollInFlight == false else {
+			isPollRequeued = true
+			return
+		}
 		let identity = bridge.currentPageIdentity()
 		if identity != pageIdentity {
 			pageIdentity = identity
@@ -369,7 +379,13 @@ public final class DeveloperOverlayModel {
 		guard identity != nil, bridge.isPageLoading() == false else { return }
 
 		isPollInFlight = true
-		defer { isPollInFlight = false }
+		defer {
+			isPollInFlight = false
+			if isPollRequeued {
+				isPollRequeued = false
+				pollNow()
+			}
+		}
 		let script = DeveloperOverlayAgentScript.poll(since: revision)
 		let (result, error) = await withCheckedContinuation { continuation in
 			bridge.evaluate(script) { result, error in

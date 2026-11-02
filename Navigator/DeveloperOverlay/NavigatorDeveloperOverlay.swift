@@ -132,7 +132,9 @@ final class NavigatorDeveloperOverlay {
 				if let selector = environment["NAVIGATOR_DEVOVERLAY_INSPECT"] {
 					log("inspect \(selector)")
 					model.inspect(selector: selector)
-					try? await Task.sleep(for: .seconds(1.5))
+					for _ in 0..<10 where model.inspectedElement == nil {
+						try? await Task.sleep(for: .milliseconds(500))
+					}
 					log("inspected: \(model.inspectedElement.map { "\($0.selector) \(Int($0.rect.width))x\(Int($0.rect.height))" } ?? "none")")
 				}
 				if let presets = environment["NAVIGATOR_DEVOVERLAY_VIEWPORT"] {
