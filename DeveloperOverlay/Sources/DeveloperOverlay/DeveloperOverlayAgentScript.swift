@@ -506,18 +506,32 @@ public enum DeveloperOverlayAgentScript {
 
 	  // Console prompt -------------------------------------------------------
 
+	  function report(value) {
+	    if (value && typeof value.then === "function") {
+	      value.then(function (resolved) {
+	        pushConsole("result", "Promise resolved: " + preview(resolved, 1), null);
+	      }, function (error) {
+	        pushConsole("error", "Promise rejected: " + preview(error, 1), null);
+	      });
+	      return JSON.stringify({ ok: true, text: "Promise {<pending>}" });
+	    }
+	    return JSON.stringify({ ok: true, text: preview(value, 1) });
+	  }
+
 	  function evaluate(source) {
 	    try {
-	      var value = (0, eval)(source);
-	      if (value && typeof value.then === "function") {
-	        value.then(function (resolved) {
-	          pushConsole("result", "Promise resolved: " + preview(resolved, 1), null);
-	        }, function (error) {
-	          pushConsole("error", "Promise rejected: " + preview(error, 1), null);
-	        });
-	        return JSON.stringify({ ok: true, text: "Promise {<pending>}" });
-	      }
-	      return JSON.stringify({ ok: true, text: preview(value, 1) });
+	      return report((0, eval)(source));
+	    } catch (error) {
+	      // A CSP without 'unsafe-eval' blocks eval; native then re-sends the source inlined.
+	      var blocked = !!(error && error.name === "EvalError");
+	      return JSON.stringify({ ok: false, blocked: blocked, text: preview(error, 0) });
+	    }
+	  }
+
+	  // Runs a function built natively from the user's source (the CSP-safe path).
+	  function evaluateInline(run) {
+	    try {
+	      return report(run());
 	    } catch (error) {
 	      return JSON.stringify({ ok: false, text: preview(error, 0) });
 	    }
@@ -537,6 +551,13 @@ public enum DeveloperOverlayAgentScript {
 	        var resolved = getComputedStyle(probe).color;
 	        probe.parentNode.removeChild(probe);
 	        if (resolved) { return resolved; }
+	      }
+	      // Otherwise the color of whatever sits along the top edge (a site header or nav bar).
+	      var top = document.elementFromPoint(Math.floor(window.innerWidth / 2), 4);
+	      for (var node = top, depth = 0; node && node.nodeType === 1 && depth < 6; node = node.parentElement, depth += 1) {
+	        if (node === document.body || node === document.documentElement) { break; }
+	        var fill = getComputedStyle(node).backgroundColor;
+	        if (fill && fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") { return fill; }
 	      }
 	      var candidates = [document.body, document.documentElement];
 	      for (var i = 0; i < candidates.length; i += 1) {
@@ -576,6 +597,7 @@ public enum DeveloperOverlayAgentScript {
 	    version: VERSION,
 	    drain: drain,
 	    evaluate: evaluate,
+	    evaluateInline: evaluateInline,
 	    startPicking: startPicking,
 	    stopPicking: function () { stopPicking(false); },
 	    clearPicked: clearPicked,
@@ -615,6 +637,20 @@ public enum DeveloperOverlayAgentScript {
 
 	public static func evaluate(_ source: String) -> String {
 		call("evaluate", arguments: [source])
+	}
+
+	/// The same evaluation with `source` inlined as an expression instead of passed to `eval`, for
+	/// pages whose CSP forbids `unsafe-eval` (injected scripts aren't subject to the page's CSP).
+	/// Statements don't parse here; the caller reports that as a timeout.
+	public static func evaluateInline(_ source: String) -> String {
+		"""
+		(function () { \
+		if (!(window.\(globalName) && window.\(globalName).version === \(version))) { \(install); } \
+		return window.\(globalName).evaluateInline(function () { return (
+		\(source)
+		); }); \
+		})()
+		"""
 	}
 
 	public static let startPicking = call("startPicking")

@@ -288,10 +288,35 @@ public final class DeveloperOverlayModel {
 		bridge.evaluate(DeveloperOverlayAgentScript.evaluate(trimmed)) { [weak self] result, error in
 			guard let self else { return }
 			let parsed = DeveloperEvaluationResult.parse(result: result, error: error)
-			self.onPollDiagnostic?("eval \(trimmed) -> ok=\(parsed.ok) \(parsed.text)")
-			self.appendLocal(level: parsed.ok ? .result : .error, text: parsed.text)
-			self.pollNow()
+			if parsed.isBlockedByCSP {
+				self.onPollDiagnostic?("eval \(trimmed) -> blocked by CSP, retrying inline")
+				self.evaluateInline(trimmed)
+				return
+			}
+			self.finishEvaluation(trimmed, parsed)
 		}
+	}
+
+	/// CSP-safe retry: the source is inlined as an expression, so statements fail to parse and the
+	/// page never answers. Say why instead of showing a bare timeout.
+	private func evaluateInline(_ source: String) {
+		bridge.evaluate(DeveloperOverlayAgentScript.evaluateInline(source)) { [weak self] result, error in
+			guard let self else { return }
+			var parsed = DeveloperEvaluationResult.parse(result: result, error: error)
+			if error != nil {
+				parsed = DeveloperEvaluationResult(
+					ok: false,
+					text: "This page's security policy blocks eval, so only single expressions can run here."
+				)
+			}
+			self.finishEvaluation(source, parsed)
+		}
+	}
+
+	private func finishEvaluation(_ source: String, _ parsed: DeveloperEvaluationResult) {
+		onPollDiagnostic?("eval \(source) -> ok=\(parsed.ok) \(parsed.text)")
+		appendLocal(level: parsed.ok ? .result : .error, text: parsed.text)
+		pollNow()
 	}
 
 	// MARK: Viewport

@@ -193,7 +193,7 @@ struct DeveloperViewportShelf: View {
 					.font(.system(size: 12, weight: .semibold))
 				Spacer()
 				if let viewport = model.pageViewport {
-					Text("\(Int(viewport.width)) × \(Int(viewport.height)) @\(viewport.devicePixelRatio.formatted())x")
+					Text(verbatim: "\(Int(viewport.width)) × \(Int(viewport.height)) @\(viewport.devicePixelRatio.formatted())x")
 						.font(.system(size: 11).monospacedDigit())
 						.foregroundStyle(.secondary)
 						.contentTransition(.numericText())
@@ -246,7 +246,7 @@ struct DeveloperViewportShelf: View {
 				Text(title)
 					.font(.system(size: 11, weight: .medium))
 					.lineLimit(1)
-				Text(subtitle)
+				Text(verbatim: subtitle)
 					.font(.system(size: 9).monospacedDigit())
 					.foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
 			}
@@ -279,10 +279,22 @@ struct DeveloperViewportBadge: View {
 				Text(preset.name)
 					.font(.system(size: 12, weight: .semibold))
 				if let size = model.viewportMode.targetSize {
-					Text("\(Int(size.width)) × \(Int(size.height))")
+					Text(verbatim: "\(Int(size.width)) × \(Int(size.height))")
 						.font(.system(size: 12, weight: .regular).monospacedDigit())
 						.foregroundStyle(.secondary)
 						.contentTransition(.numericText())
+					if let fitted = fittedSize(for: size) {
+						// The window is smaller than the device: say what the page actually gets.
+						Label {
+							Text(verbatim: "\(Int(fitted.width)) × \(Int(fitted.height))")
+						} icon: {
+							Image(systemName: "arrow.down.right.and.arrow.up.left")
+						}
+						.font(.system(size: 11, weight: .medium).monospacedDigit())
+						.foregroundStyle(.orange)
+						.help("The window is too small for this device, so the page is clamped to fit.")
+						.transition(.scale(scale: 0.8).combined(with: .opacity))
+					}
 				}
 				if preset.supportsRotation {
 					DeveloperIconButton(systemImage: "rotate.right", help: "Rotate", size: 24) {
@@ -298,5 +310,13 @@ struct DeveloperViewportBadge: View {
 		.padding(.trailing, 4)
 		.frame(height: 32)
 		.animation(DeveloperMotion.morph, value: model.viewportMode.orientation)
+		.animation(DeveloperMotion.snappy, value: model.pageViewport?.height)
+	}
+
+	/// The page's real CSS viewport when it's smaller than the preset (the stage clamps to the window).
+	private func fittedSize(for target: CGSize) -> CGSize? {
+		guard let page = model.pageViewport, page.width > 0, page.height > 0 else { return nil }
+		guard page.width + 1 < target.width || page.height + 1 < target.height else { return nil }
+		return CGSize(width: page.width, height: page.height)
 	}
 }

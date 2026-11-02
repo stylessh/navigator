@@ -95,10 +95,26 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 public struct DeveloperEvaluationResult: Equatable, Sendable, Decodable {
 	public var ok: Bool
 	public var text: String
+	/// The page's CSP blocked `eval`; retry with `DeveloperOverlayAgentScript.evaluateInline`.
+	public var isBlockedByCSP: Bool
 
-	public init(ok: Bool, text: String) {
+	public init(ok: Bool, text: String, isBlockedByCSP: Bool = false) {
 		self.ok = ok
 		self.text = text
+		self.isBlockedByCSP = isBlockedByCSP
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case ok
+		case text
+		case isBlockedByCSP = "blocked"
+	}
+
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		ok = try container.decode(Bool.self, forKey: .ok)
+		text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+		isBlockedByCSP = try container.decodeIfPresent(Bool.self, forKey: .isBlockedByCSP) ?? false
 	}
 
 	public static func parse(result: String?, error: String?) -> DeveloperEvaluationResult {

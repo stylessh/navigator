@@ -58,6 +58,9 @@ final class DeveloperOverlayPayloadTests: XCTestCase {
 			DeveloperEvaluationResult(ok: false, text: "SyntaxError")
 		)
 		XCTAssertEqual(DeveloperEvaluationResult.parse(result: nil, error: "timeout").ok, false)
+		XCTAssertTrue(
+			DeveloperEvaluationResult.parse(result: #"{"ok":false,"blocked":true,"text":"EvalError"}"#, error: nil).isBlockedByCSP
+		)
 	}
 }
 
@@ -65,6 +68,12 @@ final class DeveloperOverlayAgentScriptTests: XCTestCase {
 	func testStringLiteralEscapesQuotesNewlinesAndLineSeparators() {
 		XCTAssertEqual(DeveloperOverlayAgentScript.jsStringLiteral("a\"b\nc"), #""a\"b\nc""#)
 		XCTAssertEqual(DeveloperOverlayAgentScript.jsStringLiteral("x\u{2028}y"), #""x\u2028y""#)
+	}
+
+	func testInlineEvaluationEmbedsSourceAsExpression() {
+		let script = DeveloperOverlayAgentScript.evaluateInline("document.title // trailing comment")
+		XCTAssertTrue(script.contains("evaluateInline(function () { return ("))
+		XCTAssertTrue(script.contains("\ndocument.title // trailing comment\n); });"))
 	}
 
 	func testPollScriptReferencesRevisionAndSentinel() {
