@@ -277,12 +277,18 @@ final class BrowserChromeView: NSView {
 	private let timeProvider: () -> TimeInterval
 	private let browserCameraSessionCoordinator: any BrowserCameraSessionCoordinating
 	private let restoredHistoryCoordinator = BrowserRestoredHistoryCoordinator()
-	private lazy var siteTintSampling = BrowserSiteTintSamplingCoordinator { [weak self] tabID, script in
-		guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return }
-		// Fire-and-forget in the main frame; the script answers through the page-command channel
-		// (browser-process prompt interception), which doesn't depend on the renderer helper.
-		self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
-	}
+	private lazy var siteTintSampling = BrowserSiteTintSamplingCoordinator(
+		evaluate: { [weak self] tabID, script in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return }
+			// Fire-and-forget in the main frame; the script answers through the page-command channel
+			// (browser-process prompt interception), which doesn't depend on the renderer helper.
+			self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+		},
+		canSample: { [weak self] tabID in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return false }
+			return self.browserRuntime.isLoading(browser) == false
+		}
+	)
 
 	var siteTintStore: BrowserSiteTintStore? {
 		get { siteTintSampling.store }

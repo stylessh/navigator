@@ -228,4 +228,27 @@ final class BrowserSiteTintSamplingCoordinatorTests: XCTestCase {
 		coordinator.navigationCommitted("https://a.example/", for: tab)
 		XCTAssertEqual(scheduled, BrowserSiteTintSampler.resampleDelays)
 	}
+
+	func testWaitsForLoadBeforeSampling() {
+		let tab = UUID()
+		var isLoading = true
+		var evaluated = 0
+		var pending = [() -> Void]()
+		let coordinator = BrowserSiteTintSamplingCoordinator(
+			evaluate: { _, _ in evaluated += 1 },
+			canSample: { _ in !isLoading },
+			scheduler: { _, action in
+				pending.append(action)
+				return {}
+			}
+		)
+		coordinator.store = BrowserSiteTintStore(overrides: .init(), isEnabled: true)
+		coordinator.tabSelected(tab)
+		coordinator.titleChanged(for: tab)
+		XCTAssertEqual(evaluated, 0)
+		XCTAssertEqual(pending.count, 1, "triggers during a load fold into one deferred sample")
+		isLoading = false
+		pending.removeFirst()()
+		XCTAssertEqual(evaluated, 1)
+	}
 }

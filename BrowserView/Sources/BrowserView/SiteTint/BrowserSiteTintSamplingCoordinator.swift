@@ -25,14 +25,25 @@ final class BrowserSiteTintSamplingCoordinator {
 	}
 
 	private let evaluate: Evaluate
+	/// False while the tab is loading. The page-command channel uses window.prompt, and a prompt
+	/// during a load can cancel navigations the page starts itself, so samples wait for the load.
+	private let canSample: (BrowserTabID) -> Bool
+	private var deferredSampleCancellationByTabID = [BrowserTabID: () -> Void]()
+	static let loadingRetryDelay: TimeInterval = 0.4
+	static let maxLoadingRetries = 25
 	private let scheduler: Scheduler
 	private var pendingResamplesByTabID = [BrowserTabID: [() -> Void]]()
 	private var selectedTabID: BrowserTabID?
 	private var latestTokenByTabID = [BrowserTabID: Int]()
 	private var nextToken = 1
 
-	init(evaluate: @escaping Evaluate, scheduler: @escaping Scheduler = defaultScheduler) {
+	init(
+		evaluate: @escaping Evaluate,
+		canSample: @escaping (BrowserTabID) -> Bool = { _ in true },
+		scheduler: @escaping Scheduler = defaultScheduler
+	) {
 		self.evaluate = evaluate
+		self.canSample = canSample
 		self.scheduler = scheduler
 	}
 
@@ -76,6 +87,7 @@ final class BrowserSiteTintSamplingCoordinator {
 
 	private func cancelResamples(for tabID: BrowserTabID) {
 		pendingResamplesByTabID.removeValue(forKey: tabID)?.forEach { $0() }
+		deferredSampleCancellationByTabID.removeValue(forKey: tabID)?()
 	}
 
 	/// A page message from `tabID`. Returns true when it was a site-tint result.
@@ -95,8 +107,17 @@ final class BrowserSiteTintSamplingCoordinator {
 		return true
 	}
 
-	private func sample(_ tabID: BrowserTabID) {
+	private func sample(_ tabID: BrowserTabID, loadingRetries: Int = 0) {
 		guard let store, store.isEnabled else { return }
+		guard canSample(tabID) else {
+			// One deferred sample per tab is enough; later triggers fold into it.
+			guard deferredSampleCancellationByTabID[tabID] == nil, loadingRetries < Self.maxLoadingRetries else { return }
+			deferredSampleCancellationByTabID[tabID] = scheduler(Self.loadingRetryDelay) { [weak self] in
+				self?.deferredSampleCancellationByTabID[tabID] = nil
+				self?.sample(tabID, loadingRetries: loadingRetries + 1)
+			}
+			return
+		}
 		let token = nextToken
 		nextToken += 1
 		latestTokenByTabID[tabID] = token
