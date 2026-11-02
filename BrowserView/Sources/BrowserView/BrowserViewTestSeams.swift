@@ -80,6 +80,12 @@ public protocol BrowserRuntimeDriving: AnyObject {
 		for browser: CEFBridgeBrowserRef?,
 		handler: ((BrowserRuntimePageCommand) -> Void)?
 	)
+	@discardableResult
+	func addPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		name: String?,
+		handler: @escaping (BrowserRuntimePageCommand) -> Void
+	) -> BrowserRuntimePageCommandHandlerToken?
 }
 
 public extension BrowserRuntimeDriving {
@@ -88,6 +94,16 @@ public extension BrowserRuntimeDriving {
 		for browser: CEFBridgeBrowserRef?,
 		handler: ((BrowserRuntimePageCommand) -> Void)?
 	) {}
+
+	/// Default no-op so lightweight test doubles do not need to implement page commands.
+	@discardableResult
+	func addPageCommandHandler(
+		for browser: CEFBridgeBrowserRef?,
+		name: String?,
+		handler: @escaping (BrowserRuntimePageCommand) -> Void
+	) -> BrowserRuntimePageCommandHandlerToken? {
+		nil
+	}
 }
 
 extension BrowserRuntime: BrowserRuntimeDriving {}

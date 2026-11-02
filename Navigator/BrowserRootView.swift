@@ -22,6 +22,9 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	var siteCustomizationKeyMonitor: Any?
 	private var floatingChromeMouseMonitor: Any?
 	private var areWindowButtonsRevealed = false
+	private var isDebugPinningWindowButtons = false
+	private var isDebugPinningToolbar = false
+	private var didApplyDebugURLs = false
 	private static let floatingToolbarRevealDistance: CGFloat = 96
 	private static let windowButtonsRevealSize = CGSize(width: 120, height: 44)
 	private static let sidebarOuterPadding: CGFloat = 10
@@ -107,6 +110,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		view.window?.acceptsMouseMovedEvents = true
 		startFloatingChromeMouseMonitor()
 		setWindowButtonsRevealed(false, animated: false)
+		applyFloatingChromeDebugOverrides()
 	}
 
 	override func viewWillDisappear() {
@@ -164,6 +168,15 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 				goForward: { sidebarViewModel.goForward() },
 				reload: { sidebarViewModel.reload() },
 				openLocation: { appViewModel.presentLocationActionBar() },
+				copyURL: {
+					guard let url = sidebarViewModel.selectedTabCurrentURL, !url.isEmpty else { return }
+					NSPasteboard.general.clearContents()
+					NSPasteboard.general.setString(url, forType: .string)
+					appViewModel.presentToast(
+						title: .navigatorToastCopyCurrentTabURLTitle,
+						body: .navigatorToastCopyCurrentTabURLBody
+					)
+				},
 				openNewTab: { appViewModel.presentNewTabActionBar() },
 				selectTab: { tabID in sidebarViewModel.selectTab(id: tabID) },
 				closeTab: { tabID in sidebarViewModel.closeTab(id: tabID) }
@@ -186,6 +199,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private func observeFloatingToolbarInputs() {
 		withObservationTracking {
 			floatingToolbarState.autoCollapses = NavigatorExperiments.shared.isEnabled(.floatingToolbarAutoHide)
+				&& !isDebugPinningToolbar
 			_ = sidebarViewModel.selectedTabID
 			_ = sidebarViewModel.selectedTabCurrentURL
 		} onChange: { [weak self] in
@@ -195,6 +209,38 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 				self.observeFloatingToolbarInputs()
 			}
 		}
+	}
+
+	/// Debug-only launch switches so toolbar states can be checked without pointer input:
+	///   NAVIGATOR_DEBUG_TOOLBAR=expanded|shelf   pin the toolbar open (optionally with tab shelf)
+	///   NAVIGATOR_DEBUG_WINDOW_BUTTONS=1          keep the traffic lights visible
+	///   NAVIGATOR_DEBUG_OPEN_URLS=url1,url2       open these in the current tab + new tabs
+	private func applyFloatingChromeDebugOverrides() {
+		#if DEBUG
+			let environment = ProcessInfo.processInfo.environment
+			switch environment["NAVIGATOR_DEBUG_TOOLBAR"] {
+			case "expanded":
+				isDebugPinningToolbar = true
+				floatingToolbarState.autoCollapses = false
+				floatingToolbarState.flash()
+			case "shelf":
+				isDebugPinningToolbar = true
+				floatingToolbarState.autoCollapses = false
+				floatingToolbarState.setTabShelfPresented(true)
+			default:
+				break
+			}
+			if environment["NAVIGATOR_DEBUG_WINDOW_BUTTONS"] == "1" {
+				isDebugPinningWindowButtons = true
+				setWindowButtonsRevealed(true, animated: false)
+			}
+			if let urls = environment["NAVIGATOR_DEBUG_OPEN_URLS"], !didApplyDebugURLs {
+				didApplyDebugURLs = true
+				navigatorAppViewModel.openExternalURLs(
+					urls.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+				)
+			}
+		#endif
 	}
 
 	private func startFloatingChromeMouseMonitor() {
@@ -245,6 +291,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	/// Traffic lights stay hidden for a clean, edge-to-edge page and fade in when the pointer
 	/// reaches the top-left corner.
 	private func setWindowButtonsRevealed(_ isRevealed: Bool, animated: Bool) {
+		let isRevealed = isRevealed || isDebugPinningWindowButtons
 		guard let window = view.window else { return }
 		guard isRevealed != areWindowButtonsRevealed || !animated else { return }
 		areWindowButtonsRevealed = isRevealed

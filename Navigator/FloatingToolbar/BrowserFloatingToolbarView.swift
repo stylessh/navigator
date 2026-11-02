@@ -6,6 +6,7 @@ struct BrowserFloatingToolbarActions {
 	var goForward: @MainActor () -> Void
 	var reload: @MainActor () -> Void
 	var openLocation: @MainActor () -> Void
+	var copyURL: @MainActor () -> Void
 	var openNewTab: @MainActor () -> Void
 	var selectTab: @MainActor (BrowserTabID) -> Void
 	var closeTab: @MainActor (BrowserTabID) -> Void
@@ -43,6 +44,7 @@ struct BrowserFloatingToolbarView: View {
 	let actions: BrowserFloatingToolbarActions
 
 	@Namespace private var glassNamespace
+	@State private var isHoveringAddress = false
 
 	var body: some View {
 		FloatingGlassContainer(spacing: Metrics.clusterSpacing + 6) {
@@ -126,6 +128,13 @@ struct BrowserFloatingToolbarView: View {
 				.frame(maxWidth: .infinity, alignment: state.isExpanded ? .leading : .center)
 				.contentTransition(.opacity)
 
+			if state.isExpanded, isHoveringAddress, !addressTitleIsPlaceholder {
+				ToolbarIconButton(systemName: "link", help: "Copy URL (⇧⌘C)", size: 26) {
+					actions.copyURL()
+				}
+				.transition(.scale(scale: 0.5).combined(with: .opacity))
+			}
+
 			if state.isExpanded {
 				ToolbarIconButton(
 					systemName: sidebarViewModel.isLoading ? "xmark" : "arrow.clockwise",
@@ -154,6 +163,11 @@ struct BrowserFloatingToolbarView: View {
 		}
 		.onTapGesture {
 			actions.openLocation()
+		}
+		.onHover { isHovering in
+			withAnimation(FloatingMotion.snappy) {
+				isHoveringAddress = isHovering
+			}
 		}
 		.onGeometryChange(for: CGRect.self) { proxy in
 			proxy.frame(in: .global)
@@ -367,8 +381,16 @@ private struct TabShelfChip: View {
 		.padding(.trailing, 6)
 		.frame(width: width, height: 32)
 		.background {
-			RoundedRectangle(cornerRadius: 16, style: .continuous)
-				.fill(Color.primary.opacity(isSelected ? 0.12 : (isHovering ? 0.06 : 0)))
+			if isSelected {
+				// Selected tab reads as a raised card, like Arc's active tab.
+				RoundedRectangle(cornerRadius: 16, style: .continuous)
+					.fill(.background.opacity(0.85))
+					.shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+			}
+			else {
+				RoundedRectangle(cornerRadius: 16, style: .continuous)
+					.fill(Color.primary.opacity(isHovering ? 0.06 : 0))
+			}
 		}
 		.contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 		.onTapGesture(perform: onSelect)
