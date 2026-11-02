@@ -6,18 +6,19 @@ import Foundation
 /// Neither existing JS path returns values in this build: the renderer path times out because the
 /// bundled CEF helpers don't run Navigator's render-process handler, and the browser-process path
 /// only reports `{"dispatched":true}`. So each script is wrapped, executed in the browser process,
-/// and its value comes back through the page-command prompt channel
-/// (`window.prompt("__navigatorPageCommand__", …)`), matched to the request by id.
+/// and its value comes back through the shared page-command channel as a `devOverlay.result`
+/// command, matched to the request by id.
 @MainActor
 final class NavigatorDeveloperOverlayPageChannel {
-	nonisolated static let listenerID = "developerOverlay"
-	nonisolated static let resultCommandName = "developerOverlay.result"
+	nonisolated static let resultCommandName = "devOverlay.result"
 
 	var timeout: Duration = .seconds(2.5)
 
 	private var nextRequestID = 0
 	private var pending: [String: @MainActor (String?, String?) -> Void] = [:]
-	private var listeningBrowserKeys = Set<UInt>()
+	private var pendingBrowserKeys: [String: UInt] = [:]
+	private var handlerTokens: [UInt: BrowserRuntimePageCommandHandlerToken] = [:]
+	private weak var runtime: BrowserRuntime?
 
 	func evaluate(
 		_ expression: String,
@@ -29,6 +30,7 @@ final class NavigatorDeveloperOverlayPageChannel {
 		nextRequestID += 1
 		let requestID = String(nextRequestID)
 		pending[requestID] = completion
+		pendingBrowserKeys[requestID] = UInt(bitPattern: browser)
 
 		runtime.evaluateJavaScriptWithResult(browser, script: Self.wrap(expression, requestID: requestID)) { [weak self] _, error in
 			guard let self, let error, error.isEmpty == false else { return }
@@ -38,26 +40,34 @@ final class NavigatorDeveloperOverlayPageChannel {
 		let timeout = timeout
 		Task { [weak self] in
 			try? await Task.sleep(for: timeout)
-			self?.finish(requestID, result: nil, error: "Page script timed out")
+			guard let self, self.pending[requestID] != nil else { return }
+			// The browser may have been recreated at the same address, which drops our handler
+			// without us noticing; re-register on the next request.
+			if let key = self.pendingBrowserKeys[requestID], let token = self.handlerTokens.removeValue(forKey: key) {
+				self.runtime?.removePageCommandHandler(token)
+			}
+			self.finish(requestID, result: nil, error: "Page script timed out")
 		}
 	}
 
 	private func listenIfNeeded(to browser: CEFBridgeBrowserRef, runtime: BrowserRuntime) {
+		self.runtime = runtime
 		let key = UInt(bitPattern: browser)
-		guard listeningBrowserKeys.insert(key).inserted else { return }
-		runtime.setPageCommandListener(Self.listenerID, for: browser) { [weak self] command in
+		guard handlerTokens[key] == nil else { return }
+		handlerTokens[key] = runtime.addPageCommandHandler(for: browser, name: Self.resultCommandName) { [weak self] command in
 			self?.handle(command)
 		}
 	}
 
 	private func handle(_ command: BrowserRuntimePageCommand) {
-		guard command.name == Self.resultCommandName, let requestID = command.arguments["id"] else { return }
+		guard let requestID = command.arguments["id"] else { return }
 		let error = command.arguments["error"].flatMap { $0.isEmpty ? nil : $0 }
 		let result = command.arguments["hasResult"] == "1" ? command.arguments["result"] : nil
 		finish(requestID, result: result, error: error)
 	}
 
 	private func finish(_ requestID: String, result: String?, error: String?) {
+		pendingBrowserKeys.removeValue(forKey: requestID)
 		guard let completion = pending.removeValue(forKey: requestID) else { return }
 		completion(result, error)
 	}
@@ -74,17 +84,12 @@ final class NavigatorDeveloperOverlayPageChannel {
 		  } catch (__x) {
 		    __e = String((__x && __x.message) || __x);
 		  }
-		  try {
-		    window.prompt("\(BrowserRuntimePageCommand.promptMessage)", JSON.stringify({
-		      name: "\(resultCommandName)",
-		      arguments: {
-		        id: "\(requestID)",
-		        hasResult: (__r === undefined || __r === null) ? "0" : "1",
-		        result: (__r === undefined || __r === null) ? "" : __r,
-		        error: __e || ""
-		      }
-		    }));
-		  } catch (__ignored) {}
+		  \(BrowserRuntimePageCommand.javaScriptSendFunction)("\(resultCommandName)", {
+		    id: "\(requestID)",
+		    hasResult: (__r === undefined || __r === null) ? "0" : "1",
+		    result: (__r === undefined || __r === null) ? "" : __r,
+		    error: __e || ""
+		  });
 		})();
 		"""
 	}
