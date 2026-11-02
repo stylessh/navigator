@@ -10,4 +10,6 @@ struct BrowserPageLifecycleHooks {
 	var didCommit: (@MainActor (BrowserTabID, CEFBridgeBrowserRef, String) -> Void)?
 	/// Navigation state was re-read; `isLoading` false after true means the load finished.
 	var didSyncLoadingState: (@MainActor (BrowserTabID, CEFBridgeBrowserRef, Bool) -> Void)?
+	/// A page script posted a command through `window.prompt("__navigatorPageCommand__", json)`.
+	var didReceivePageCommand: (@MainActor (BrowserTabID, BrowserRuntimePageCommand) -> Void)?
 }

@@ -3,7 +3,10 @@
 // Native code talks to it through window.__navigatorBoost (see BoostScriptBuilder.swift).
 (function () {
   "use strict";
-  var VERSION = 1;
+  var VERSION = 2;
+  // Captured at install so a page that overrides window.prompt can't intercept native messages.
+  var nativePrompt = window.prompt;
+  var PAGE_COMMAND = "__navigatorPageCommand__";
   var existing = window.__navigatorBoost;
   if (existing && existing.version >= VERSION) { return; }
 
@@ -220,6 +223,7 @@
       host.remove();
       picker = null;
       pendingPick = { selector: selector, cancelled: selector === "" };
+      post("boost.pick", { selector: selector, cancelled: selector === "" ? "true" : "false" });
     }
 
     window.addEventListener("mousemove", onMove, true);
@@ -229,6 +233,28 @@
     window.addEventListener("keydown", onKey, true);
     picker = { finish: finish };
     return "started";
+  }
+
+  // ---------- Page -> native ----------
+
+  // Native code can't read evaluation results, so the page posts them back as page commands.
+  // Arguments must be strings.
+  function post(name, args) {
+    try { nativePrompt.call(window, PAGE_COMMAND, JSON.stringify({ name: name, arguments: args || {} })); }
+    catch (e) { /* no native host (tests, or prompt blocked) */ }
+  }
+
+  function report(token, fn) {
+    var args = { token: String(token) };
+    try {
+      var value = fn();
+      if (value === null || value === undefined) { args.isNull = "true"; args.value = ""; }
+      else { args.value = typeof value === "string" ? value : JSON.stringify(value); }
+    } catch (error) {
+      args.error = String(error && error.message || error);
+    }
+    post("boost.result", args);
+    return "reported";
   }
 
   // ---------- Public API ----------
@@ -270,6 +296,8 @@
       return result;
     },
     selectorFor: selectorFor,
+    post: post,
+    report: report,
     countMatches: function (selector) {
       try { return document.querySelectorAll(selector).length; } catch (e) { return -1; }
     },

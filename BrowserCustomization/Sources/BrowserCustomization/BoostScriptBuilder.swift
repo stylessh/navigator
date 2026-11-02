@@ -54,6 +54,19 @@ public enum BoostScriptBuilder {
 	}
 
 	public static let takePickScript = "window.__navigatorBoost ? window.__navigatorBoost.takePick() : ''"
+
+	/// Evaluates `expression` in the page and posts its value back as a `boost.result` page command
+	/// carrying `token`, because the browser-process evaluate API can't return values.
+	public static func reportScript(expression: String, token: String) -> String {
+		runtimeSource + "\n;window.__navigatorBoost.report(" + jsonLiteral(token) + ", function () { return (\n"
+			+ expression + "\n); });"
+	}
+
+	/// Page command names posted by the runtime.
+	public enum PageCommand {
+		public static let result = "boost.result"
+		public static let pick = "boost.pick"
+	}
 	public static let cancelPickerScript = "window.__navigatorBoost && window.__navigatorBoost.cancelPicker();"
 
 	public static func countMatchesScript(selector: String) -> String {

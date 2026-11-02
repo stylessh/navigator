@@ -59,9 +59,13 @@ apply on strict sites like GitHub. The JS test suite checks this against a stric
   it's off until the person flips a clearly labeled switch for that site.
 - **Files over a database.** Boosts sync with dotfiles, iCloud Drive or git for free. A 500 ms
   fingerprint poll reloads them; FSEvents would be the production path.
-- **The picker uses polling.** The page has no direct channel back to native yet, so native polls
-  `takePick()` every 150 ms while the picker is open. Production should add a CEF process
-  message (`navigator.boost.pick`) like the camera routing events already use.
+- **Results come back as page commands.** Neither CEF evaluate path returns values reliably (the
+  browser-process one only reports `{"dispatched":true}`), so the runtime posts results back through
+  the shared page-command channel (`window.prompt("__navigatorPageCommand__", json)`, the same
+  channel link hints uses). The runtime posts `boost.pick` when the picker finishes, and
+  `boost.result` (with a token) for `evaluateInPage`, which match counts, `{selection}` and
+  script actions use. The runtime keeps its own copy of `window.prompt` from install time, so a page
+  that overrides `prompt` can't intercept them.
 - **Injection uses `frame->ExecuteJavaScript` on commit, not document start.** That can cause a
   brief flash of unstyled content on heavy pages. The fix is to inject the sync script from
   `OnContextCreated` in the renderer process, where the camera shim is already installed.

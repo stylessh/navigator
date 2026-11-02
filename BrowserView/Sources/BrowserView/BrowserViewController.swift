@@ -1154,6 +1154,7 @@ final class BrowserChromeView: NSView {
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
+			self.bindPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
 			self.syncNavigationState(for: hostedTab.id)
 			self.browserRuntime.noteBrowserActivity()
@@ -1998,6 +1999,26 @@ final class BrowserChromeView: NSView {
 
 	private func tabViewModel(for tabID: BrowserTabID) -> BrowserTabViewModel? {
 		sidebarViewModel.tabs.first(where: { $0.id == tabID })
+	}
+
+	// MARK: Page commands
+
+	private func bindPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.setPageCommandHandler(for: browser) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			self.handlePageCommand(command, tabID: tabID)
+		}
+	}
+
+	private func handlePageCommand(_ command: BrowserRuntimePageCommand, tabID: BrowserTabID) {
+		switch command.name {
+		default:
+			// Layered features (site customization) get every command not handled above.
+			pageLifecycleHooks.didReceivePageCommand?(tabID, command)
+		}
 	}
 
 	private func captureScrollStateIfNeeded(for tabID: BrowserTabID) {

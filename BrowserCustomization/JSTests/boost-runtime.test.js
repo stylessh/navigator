@@ -34,7 +34,7 @@ async function test(name, fn) {
 
   await test("installs idempotently", async () => {
     await install(); await install();
-    assert.strictEqual(await page.evaluate(() => window.__navigatorBoost.version), 1);
+    assert.strictEqual(await page.evaluate(() => window.__navigatorBoost.version), 2);
   });
 
   await test("applies CSS despite a strict style-src CSP (adoptedStyleSheets)", async () => {
@@ -118,6 +118,29 @@ async function test(name, fn) {
     await page.keyboard.press("Escape");
     const pick = JSON.parse(await page.evaluate(() => window.__navigatorBoost.takePick()));
     assert.strictEqual(pick.cancelled, true);
+  });
+
+  await test("posts picks and results to native through the page command prompt", async () => {
+    const commands = [];
+    const onDialog = async (dialog) => {
+      if (dialog.message() === "__navigatorPageCommand__") { commands.push(JSON.parse(dialog.defaultValue())); }
+      await dialog.dismiss();
+    };
+    page.on("dialog", onDialog);
+    // A page overriding prompt must not intercept native messages.
+    await page.evaluate(() => { window.prompt = () => "hijacked"; });
+    await page.evaluate(() => window.__navigatorBoost.startPicker());
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => window.__navigatorBoost.report("t1", () => document.querySelectorAll(".card").length));
+    await page.evaluate(() => window.__navigatorBoost.report("t2", () => null));
+    await page.evaluate(() => window.__navigatorBoost.report("t3", () => { throw new Error("nope"); }));
+    page.off("dialog", onDialog);
+    assert.deepStrictEqual(commands, [
+      { name: "boost.pick", arguments: { selector: "", cancelled: "true" } },
+      { name: "boost.result", arguments: { token: "t1", value: "3" } },
+      { name: "boost.result", arguments: { token: "t2", isNull: "true", value: "" } },
+      { name: "boost.result", arguments: { token: "t3", error: "nope" } },
+    ]);
   });
 
   await test("countMatches reports invalid selectors as -1", async () => {

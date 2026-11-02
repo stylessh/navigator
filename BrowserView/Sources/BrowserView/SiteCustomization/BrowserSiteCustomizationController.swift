@@ -21,7 +21,9 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 
 	private weak var owner: BrowserViewController?
 	private var loadingTabIDs: Set<BrowserTabID> = []
-	private var pickerTask: Task<Void, Never>?
+	private var pickerURL: URL?
+	private var pendingResults: [String: CheckedContinuation<String?, Never>] = [:]
+	private static let resultTimeout: Duration = .seconds(2)
 	private var panelController: SiteCustomizationPanelWindowController?
 	private var centerObserver: UUID?
 	private var isAttached = false
@@ -58,6 +60,9 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 		chromeView.pageLifecycleHooks.didSyncLoadingState = { [weak self] tabID, browser, isLoading in
 			self?.loadingStateDidSync(tabID: tabID, browser: browser, isLoading: isLoading)
 		}
+		chromeView.pageLifecycleHooks.didReceivePageCommand = { [weak self] tabID, command in
+			self?.handlePageCommand(command, tabID: tabID)
+		}
 		centerObserver = center.addChangeObserver { [weak self] in
 			self?.resyncAllLiveBrowsers()
 			self?.onActionsChange?()
@@ -81,6 +86,11 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 		guard let url = URL(string: url) else { return }
 		evaluate(center.scripts(for: url, phase: .commit), in: browser)
 		if tabID == owner?.selectedTabID {
+			// Navigating away ends any pick in progress; the old document's picker is gone.
+			if pickerURL != nil, pickerURL?.host != url.host || pickerURL?.path != url.path {
+				pickerURL = nil
+				panelController?.setPassthrough(false)
+			}
 			onActionsChange?()
 		}
 	}
@@ -149,12 +159,45 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 
 	// MARK: NavigatorActionPerformer
 
-	public func evaluateInPage(_ script: String) async -> String? {
+	/// Evaluates a JS expression in the selected page and returns its string value.
+	///
+	/// Neither evaluate API returns values reliably (the browser-process one only reports
+	/// `{"dispatched":true}`), so the page posts the value back as a `boost.result` page command.
+	/// Returns nil on error, on a null/undefined value, or after a 2 s timeout.
+	public func evaluateInPage(_ expression: String) async -> String? {
 		guard let browser = owner?.hostedBrowser, let runtime else { return nil }
+		let token = UUID().uuidString
 		return await withCheckedContinuation { continuation in
-			runtime.evaluateJavaScriptInRendererWithResult(browser, script: script) { result, error in
-				continuation.resume(returning: error == nil || error?.isEmpty == true ? result : nil)
+			pendingResults[token] = continuation
+			runtime.evaluateJavaScriptWithResult(
+				browser,
+				script: BoostScriptBuilder.reportScript(expression: expression, token: token)
+			) { _, _ in }
+			Task { @MainActor [weak self] in
+				try? await Task.sleep(for: Self.resultTimeout)
+				self?.pendingResults.removeValue(forKey: token)?.resume(returning: nil)
 			}
+		}
+	}
+
+	private func handlePageCommand(_ command: BrowserRuntimePageCommand, tabID: BrowserTabID) {
+		switch command.name {
+		case BoostScriptBuilder.PageCommand.result:
+			guard let token = command.arguments["token"],
+			      let continuation = pendingResults.removeValue(forKey: token)
+			else { return }
+			let failed = command.arguments["error"] != nil || command.arguments["isNull"] == "true"
+			continuation.resume(returning: failed ? nil : command.arguments["value"])
+		case BoostScriptBuilder.PageCommand.pick:
+			guard tabID == owner?.selectedTabID, let url = pickerURL else { return }
+			pickerURL = nil
+			panelController?.setPassthrough(false)
+			let selector = command.arguments["selector"] ?? ""
+			guard command.arguments["cancelled"] != "true", selector.isEmpty == false else { return }
+			center.boosts.addZap(selector, for: url)
+			showToast("Hidden on \(SiteHost.normalized(url.host) ?? "this site")", systemImage: "scope")
+		default:
+			break
 		}
 	}
 
@@ -182,33 +225,18 @@ public final class BrowserSiteCustomizationController: NavigatorActionPerformer 
 			showToast("Zap works on web pages", systemImage: "scope")
 			return
 		}
-		pickerTask?.cancel()
 		let accent = center.boosts.siteBoost(for: url).flatMap { boost -> String? in
 			if case let .custom(hex) = boost.tint { return hex }
 			return nil
 		}
+		// The pick comes back as a `boost.pick` page command (see handlePageCommand).
+		pickerURL = url
 		runtime?.evaluateJavaScriptWithResult(browser, script: BoostScriptBuilder.startPickerScript(accentHex: accent)) { _, _ in }
 		panelController?.setPassthrough(true)
-		pickerTask = Task { @MainActor [weak self] in
-			// Poll for the pick; the page has no direct channel back to native yet (see design doc).
-			for _ in 0 ..< 1200 {
-				try? await Task.sleep(for: .milliseconds(150))
-				guard let self, Task.isCancelled == false else { return }
-				let raw = await self.evaluateInPage(BoostScriptBuilder.takePickScript)
-				guard let pick = BoostPickResult.parse(raw) else { continue }
-				self.panelController?.setPassthrough(false)
-				guard pick.cancelled == false, pick.selector.isEmpty == false else { return }
-				self.center.boosts.addZap(pick.selector, for: url)
-				self.showToast("Hidden on \(SiteHost.normalized(url.host) ?? "this site")", systemImage: "scope")
-				return
-			}
-			self?.cancelZapPicker()
-		}
 	}
 
 	public func cancelZapPicker() {
-		pickerTask?.cancel()
-		pickerTask = nil
+		pickerURL = nil
 		panelController?.setPassthrough(false)
 		if let browser = owner?.hostedBrowser {
 			runtime?.evaluateJavaScriptWithResult(browser, script: BoostScriptBuilder.cancelPickerScript) { _, _ in }
