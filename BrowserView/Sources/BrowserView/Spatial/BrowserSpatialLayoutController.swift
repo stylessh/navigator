@@ -32,6 +32,7 @@ final class BrowserSpatialLayoutController: NSObject {
 	/// Every split the user has made. A split is shown when its tab is selected.
 	private(set) var splits: [SpatialSplitLayout<BrowserTabID>]
 	private var livePaneIDs = Set<BrowserTabID>()
+	private var lastPartnerByTabID = [BrowserTabID: BrowserTabID]()
 	private var snapshots = [BrowserTabID: CGImage]()
 	private var overview: SpatialTabOverviewView?
 	private var pinch: SpatialPinchInterpreter?
@@ -173,6 +174,12 @@ final class BrowserSpatialLayoutController: NSObject {
 		guard isSplitEnabled, let selected = hooks.selectedTabID() else { return }
 		if let index = splits.firstIndex(where: { $0.contains(selected) }) {
 			let split = splits[index]
+			// Remember who we were split with so the next ⌘⌥\ brings them back together.
+			if let partner = split.neighbor(of: selected, direction: .right) ?? split.neighbor(of: selected, direction: .left)
+				?? split.paneIDs.first(where: { $0 != selected }) {
+				lastPartnerByTabID[selected] = partner
+				lastPartnerByTabID[partner] = selected
+			}
 			if let next = split.removing(selected), next.isSplit {
 				splits[index] = next
 			}
@@ -183,6 +190,12 @@ final class BrowserSpatialLayoutController: NSObject {
 			return
 		}
 		let tabs = hooks.tabs()
+		if let partner = lastPartnerByTabID[selected], partner != selected,
+		   tabs.contains(where: { $0.id == partner }),
+		   splits.contains(where: { $0.contains(partner) }) == false {
+			split(partner, into: selected, edge: .right)
+			return
+		}
 		guard let selectedIndex = tabs.firstIndex(where: { $0.id == selected }) else { return }
 		let candidates = tabs.indices
 			.filter { $0 != selectedIndex }

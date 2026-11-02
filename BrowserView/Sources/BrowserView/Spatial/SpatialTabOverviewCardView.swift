@@ -127,6 +127,7 @@ final class SpatialTabOverviewCardView: NSView {
 		titleLabel.stringValue = item.title.isEmpty ? item.host : item.title
 		hostLabel.stringValue = item.host
 		thumbnailLayer.contents = item.snapshot
+		updateThumbnailGravity()
 		placeholderLabel.isHidden = item.snapshot != nil
 		placeholderLabel.stringValue = item.host.first.map { String($0).uppercased() } ?? "•"
 		splitBadge.isHidden = item.isInSplit == false
@@ -168,6 +169,7 @@ final class SpatialTabOverviewCardView: NSView {
 		CATransaction.setDisableActions(true)
 		thumbnailLayer.frame = thumbnailView.bounds
 		CATransaction.commit()
+		updateThumbnailGravity()
 		placeholderLabel.sizeToFit()
 		placeholderLabel.frame.origin = CGPoint(
 			x: (thumbnailRect.width - placeholderLabel.frame.width) / 2,
@@ -182,6 +184,20 @@ final class SpatialTabOverviewCardView: NSView {
 		hostLabel.alignment = .right
 		closeButton.frame = CGRect(x: -9, y: -9, width: 26, height: 26)
 		updateShadow()
+	}
+
+	/// Fill the card when the snapshot has roughly the card's shape; otherwise (e.g. a narrow
+	/// split pane) fit it whole, top-aligned, instead of cropping the page's header away.
+	private func updateThumbnailGravity() {
+		guard let image = item.snapshot, thumbnailView.bounds.width > 0, thumbnailView.bounds.height > 0 else { return }
+		let imageAspect = CGFloat(image.width) / max(CGFloat(image.height), 1)
+		let cardAspect = thumbnailView.bounds.width / thumbnailView.bounds.height
+		let gravity: CALayerContentsGravity = abs(imageAspect / cardAspect - 1) < 0.15 ? .resizeAspectFill : .resizeAspect
+		guard thumbnailLayer.contentsGravity != gravity else { return }
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		thumbnailLayer.contentsGravity = gravity
+		CATransaction.commit()
 	}
 
 	private func updateSelectionRing() {

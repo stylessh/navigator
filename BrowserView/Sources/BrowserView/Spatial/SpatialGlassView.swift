@@ -35,7 +35,12 @@ final class SpatialGlassView: NSView {
 		let effect: NSView
 		if #available(macOS 26.0, *) {
 			let glass = NSGlassEffectView()
-			glass.style = style == .backdrop ? .clear : .regular
+			// The backdrop uses regular glass with a dark tint: clear glass picks up the luminance
+			// of whatever page is beneath and washed out over light pages.
+			glass.style = .regular
+			if style == .backdrop {
+				glass.tintColor = NSColor.black.withAlphaComponent(0.35)
+			}
 			glass.cornerRadius = cornerRadius
 			glass.contentView = contentView
 			effect = glass
