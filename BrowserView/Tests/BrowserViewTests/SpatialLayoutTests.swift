@@ -112,7 +112,7 @@ final class SpatialOverviewGridTests: XCTestCase {
 		for count in 1 ... 24 {
 			let grid = SpatialOverviewGrid(bounds: bounds, itemCount: count, thumbnailAspectRatio: 16 / 10)
 			XCTAssertEqual(grid.frames.count, count)
-			let available = CGRect(x: 48, y: 96, width: 1400 - 96, height: 900 - 208)
+			let available = CGRect(x: 48, y: 108, width: 1400 - 96, height: 900 - 220)
 			for (index, frame) in grid.frames.enumerated() {
 				XCTAssertTrue(available.insetBy(dx: -1, dy: -1).contains(frame), "count \(count) index \(index) \(frame)")
 				for other in grid.frames[(index + 1)...] {

@@ -24,7 +24,7 @@ public struct SpatialOverviewGrid: Equatable, Sendable {
 		itemCount: Int,
 		thumbnailAspectRatio: CGFloat,
 		spacing: CGFloat = 28,
-		insets: SpatialEdgeInsets = .init(top: 96, left: 48, bottom: 112, right: 48),
+		insets: SpatialEdgeInsets = .init(top: 108, left: 48, bottom: 112, right: 48),
 		captionHeight: CGFloat = 30,
 		maximumCardWidth: CGFloat = 460
 	) {

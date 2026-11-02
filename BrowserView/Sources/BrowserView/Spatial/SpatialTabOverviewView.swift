@@ -297,7 +297,8 @@ final class SpatialTabOverviewView: NSView {
 		backdrop.frame = bounds
 		dimView.frame = bounds
 		layoutHeader()
-		hintLabel.frame = CGRect(x: 24, y: bounds.height - 44, width: max(bounds.width - 48, 0), height: 16)
+		// Sits under the header pill; the bottom edge belongs to the floating toolbar.
+		hintLabel.frame = CGRect(x: 24, y: header.frame.maxY + 10, width: max(bounds.width - 48, 0), height: 16)
 		if hasPresented, isDismissing == false, case .idle = dragState {
 			relayoutCards(animated: false)
 		}
