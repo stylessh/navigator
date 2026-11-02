@@ -3,7 +3,8 @@ import BrowserView
 import Foundation
 
 /// Wires per-site customization (BrowserView/SiteCustomization) into the window chrome:
-/// toasts, toolbar accessories from the action registry, and ⌥⌘Z / ⌥⌘B / ⌥⌘C.
+/// toasts, toolbar accessories from the action registry, and ⌥⌘Z / ⌥⌘B / ⌥⇧⌘C.
+/// (Copy Clean Link uses ⌥⇧⌘C because the developer overlay owns ⌥⌘C for inspect.)
 extension BrowserRootViewController {
 	private static let zapKeyCode: UInt16 = 6 // Z
 	private static let customizeKeyCode: UInt16 = 11 // B
@@ -59,14 +60,16 @@ extension BrowserRootViewController {
 			return true
 		}
 		guard windowNumber == view.window?.windowNumber else { return false }
+		if keyCode == Self.copyCleanLinkKeyCode, modifiers == [.command, .option, .shift] {
+			customization.copyCleanLink()
+			return true
+		}
 		guard modifiers == [.command, .option] else { return false }
 		switch keyCode {
 		case Self.zapKeyCode:
 			customization.startZapPicker()
 		case Self.customizeKeyCode:
 			customization.toggleCustomizationPanel()
-		case Self.copyCleanLinkKeyCode:
-			customization.copyCleanLink()
 		default:
 			return false
 		}

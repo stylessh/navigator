@@ -59,7 +59,7 @@ public enum BuiltInActions {
 				systemImage: "link.badge.plus",
 				keywords: ["copy", "url", "share", "utm", "tracking"],
 				placements: [.commandBar, .pageMenu],
-				shortcutHint: "⌥⌘C"
+				shortcutHint: "⌥⇧⌘C"
 			) { context, performer in
 				guard let url = context.url else { return }
 				let cleaned = CleanURL.clean(url)
