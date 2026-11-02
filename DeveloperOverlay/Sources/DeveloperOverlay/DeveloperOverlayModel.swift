@@ -429,7 +429,7 @@ public final class DeveloperOverlayModel {
 				onPollDiagnostic(
 					"poll rev=\(payload.revision) console+=\(payload.console.count) network+=\(payload.network.count) "
 						+ "picked=\(payload.picked?.value?.selector ?? "-") picking=\(payload.isPicking) "
-						+ "theme=\(payload.themeColor ?? "-") url=\(payload.url) "
+						+ "theme=\(payload.themeColor ?? "-") vis=\(payload.visibility ?? "-") url=\(payload.url) "
 						+ "totals console=\(consoleEntries.count) network=\(networkEntries.count)"
 				)
 			case .agentMissing:

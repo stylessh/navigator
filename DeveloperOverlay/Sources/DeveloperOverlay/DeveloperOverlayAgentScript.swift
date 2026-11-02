@@ -606,6 +606,7 @@ public enum DeveloperOverlayAgentScript {
 	      url: location.href,
 	      title: document.title,
 	      theme: themeColor(),
+	      visibility: document.visibilityState,
 	      viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 }
 	    });
 	  }

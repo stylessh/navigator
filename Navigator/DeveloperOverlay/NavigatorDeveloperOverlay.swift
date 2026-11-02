@@ -96,8 +96,24 @@ final class NavigatorDeveloperOverlay {
 			let keys = environment.keys.filter { $0.hasPrefix("NAVIGATOR_DEVOVERLAY_") }
 			guard keys.isEmpty == false else { return }
 			let model = controller.model
+			let launch = Date()
 			let log: @Sendable (String) -> Void = { message in
-				FileHandle.standardOutput.write(Data("[DeveloperOverlay] \(message)\n".utf8))
+				let elapsed = String(format: "+%.1fs", Date().timeIntervalSince(launch))
+				FileHandle.standardOutput.write(Data("[DeveloperOverlay] \(elapsed) \(message)\n".utf8))
+			}
+			// Window visibility changes (occlusion, display sleep) explain stalls in unattended runs.
+			Task { @MainActor [weak containerView] in
+				var lastVisible: Bool?
+				while containerView != nil {
+					if let window = containerView?.window {
+						let visible = window.occlusionState.contains(.visible)
+						if visible != lastVisible {
+							log("window occlusion visible=\(visible)")
+							lastVisible = visible
+						}
+					}
+					try? await Task.sleep(for: .seconds(1))
+				}
 			}
 			if environment["NAVIGATOR_DEVOVERLAY_LOG"] == "1" {
 				model.onPollDiagnostic = log

@@ -36,6 +36,8 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 	public var viewport: Viewport?
 	/// CSS color string for the page's accent (`rgb(...)`), when it has one.
 	public var themeColor: String?
+	/// `document.visibilityState` (diagnostics).
+	public var visibility: String?
 
 	private enum CodingKeys: String, CodingKey {
 		case revision = "rev"
@@ -47,6 +49,7 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 		case title
 		case viewport
 		case themeColor = "theme"
+		case visibility
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -60,6 +63,7 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 		title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
 		viewport = try container.decodeIfPresent(Viewport.self, forKey: .viewport)
 		themeColor = try container.decodeIfPresent(String.self, forKey: .themeColor)
+		visibility = try container.decodeIfPresent(String.self, forKey: .visibility)
 	}
 
 	public enum PollResult: Equatable, Sendable {
