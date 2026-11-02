@@ -17,7 +17,7 @@ struct BrowserFloatingToolbarActions {
 /// Layout (compact):          [favicon  host]
 /// The tab shelf springs up above the bar when the tab button is pressed.
 struct BrowserFloatingToolbarView: View {
-	private enum GlassID: Hashable {
+	nonisolated private enum GlassID: Hashable {
 		case navigation
 		case address
 		case tabs
