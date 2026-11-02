@@ -174,6 +174,10 @@ void CEFBridge_ExecuteJavaScriptInRendererWithResult(
   void* user_data
 );
 
+// Returns a retained CGImageRef (as void*) of what `view` (an NSView*) currently
+// shows on screen, or NULL. Main thread only. Caller must CFRelease the result.
+void* CEFBridge_CopyViewSnapshotImage(void* view);
+
 #ifdef __cplusplus
 }
 #endif

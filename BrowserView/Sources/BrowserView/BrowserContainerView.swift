@@ -4,6 +4,9 @@ import BrowserSidebar
 import ModelKit
 import Vendors
 
+@_silgen_name("CEFBridge_CopyViewSnapshotImage")
+private func browserContainerCopyViewSnapshotImage(_ view: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+
 private enum BrowserContentClippingFeatureFlag {
 	static let environmentKey = "NAVIGATOR_DISABLE_BROWSER_CONTENT_CLIPPING"
 
@@ -342,6 +345,17 @@ public final class BrowserContainerView: NSView {
 
 	public var browserRef: CEFBridgeBrowserRef? {
 		browser
+	}
+
+	/// A thumbnail of what this tab currently shows, for the spatial tab overview.
+	/// Only works while the container is visible on screen.
+	func captureSpatialSnapshot() -> CGImage? {
+		guard isHiddenOrHasHiddenAncestor == false, window != nil else { return nil }
+		let target: NSView = topLevelNativeContentView ?? browserHostView
+		guard let raw = browserContainerCopyViewSnapshotImage(Unmanaged.passUnretained(target).toOpaque()) else {
+			return nil
+		}
+		return Unmanaged<CGImage>.fromOpaque(raw).takeRetainedValue()
 	}
 
 	func setPermissionPrompt(

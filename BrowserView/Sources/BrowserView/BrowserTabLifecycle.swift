@@ -52,6 +52,8 @@ enum BrowserTabProtectionReason: Hashable {
 	case accessibilityFocus
 	case authSensitive
 	case permissionPrompt
+	/// Visible as a non-focused pane of a split.
+	case splitPane
 }
 
 struct BrowserTabLifecycleRecord: Equatable {
