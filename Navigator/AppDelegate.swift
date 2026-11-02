@@ -132,6 +132,20 @@ import Vendors
 		)
 	}
 
+	@objc func openCommandBar(_ sender: Any?) {
+		ensureBrowserWindowActive()
+		activeNavigatorAppViewModel().presentCommandBar()
+	}
+
+	private func makeCommandBarHostActions() -> NavigatorCommandBarHostActions {
+		NavigatorCommandBarHostActions(
+			openNewWindow: { [weak self] in self?.openNewWindow(nil) },
+			openSettings: { [weak self] in self?.openSettingsWindow() },
+			copyCurrentURL: { [weak self] in self?.copySelectedTabURLToPasteboard() },
+			togglePin: { [weak self] in self?.toggleSelectedTabPin() }
+		)
+	}
+
 	@objc func openNewTabBar(_ sender: Any?) {
 		ensureBrowserWindowActive()
 		activeNavigatorAppViewModel().presentNewTabActionBar()
@@ -260,6 +274,15 @@ import Vendors
 		openLocationMenuItem.target = self
 		openLocationMenuItem.keyEquivalentModifierMask = [.command]
 		fileMenu.addItem(openLocationMenuItem)
+
+		let openCommandBarMenuItem = NSMenuItem(
+			title: "Command Bar…",
+			action: #selector(openCommandBar(_:)),
+			keyEquivalent: "k"
+		)
+		openCommandBarMenuItem.target = self
+		openCommandBarMenuItem.keyEquivalentModifierMask = [.command]
+		fileMenu.addItem(openCommandBarMenuItem)
 		addSubmenu(fileMenu, titled: "File", to: mainMenu)
 		addSubmenu(makeEditMenu(), titled: String(localized: .navigatorMenuEditTitle), to: mainMenu)
 		installLinkHintsMenuItems(in: mainMenu)
@@ -790,6 +813,9 @@ import Vendors
 			},
 			showLinkHints: { [weak self] openInNewTab in
 				self?.beginLinkHintsInActiveWindow(openInNewTab: openInNewTab)
+			},
+			openCommandBar: { [weak self] in
+				self?.openCommandBar(nil)
 			}
 		)
 	}
@@ -934,6 +960,7 @@ import Vendors
 		navigatorAppViewModel: AppViewModel,
 		isPrimaryWindow: Bool
 	) -> NSWindow {
+		navigatorAppViewModel.commandBarHostActions = makeCommandBarHostActions()
 		let persistedFrame = loadPersistedNavigatorWindowFrame()
 		let window = NSWindow(
 			contentRect: NSRect(origin: .zero, size: NavigatorBrowserWindowSizing.defaultFrameSize),
