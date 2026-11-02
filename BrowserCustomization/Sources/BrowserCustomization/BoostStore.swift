@@ -21,7 +21,7 @@ public final class BoostStore {
 	public private(set) var revision = 0
 
 	public let directory: URL
-	@ObservationIgnored private let fileManager: FileManager
+	private let fileManager: FileManager
 	@ObservationIgnored private var observers: [UUID: @MainActor () -> Void] = [:]
 
 	public static let manifestFileName = "boost.json"

@@ -3,6 +3,7 @@ import BrowserCustomization
 import BrowserCustomizationUI
 import BrowserRuntime
 import ModelKit
+import Observation
 import SwiftUI
 import Vendors
 
@@ -13,9 +14,9 @@ import Vendors
 public final class BrowserSiteCustomizationController: NavigatorActionPerformer {
 	public let center: SiteCustomizationCenter
 	/// Set by the app to show toasts in its own overlay.
-	public var toastHandler: ((String, String?) -> Void)?
+	public var toastHandler: (@MainActor (String, String?) -> Void)?
 	/// Called whenever the set of actions or the selected page changes, so hosts can refresh toolbar items.
-	public var onActionsChange: (() -> Void)?
+	public var onActionsChange: (@MainActor () -> Void)?
 
 	private weak var owner: BrowserViewController?
 	private var loadingTabIDs: Set<BrowserTabID> = []

@@ -34,23 +34,27 @@ extension BrowserRootViewController {
 	private func installSiteCustomizationKeyMonitor() {
 		guard siteCustomizationKeyMonitor == nil else { return }
 		siteCustomizationKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-			guard let self, event.window === self.view.window else { return event }
-			let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-			guard modifiers == [.command, .option] else { return event }
-			let customization = self.browserViewController.siteCustomization
-			switch event.keyCode {
-			case Self.zapKeyCode:
-				customization.startZapPicker()
-				return nil
-			case Self.customizeKeyCode:
-				customization.toggleCustomizationPanel()
-				return nil
-			case Self.copyCleanLinkKeyCode:
-				customization.copyCleanLink()
-				return nil
-			default:
-				return event
+			MainActor.assumeIsolated {
+				self?.handleSiteCustomizationKey(event) == true ? nil : event
 			}
 		}
+	}
+
+	private func handleSiteCustomizationKey(_ event: NSEvent) -> Bool {
+		guard event.window === view.window else { return false }
+		let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+		guard modifiers == [.command, .option] else { return false }
+		let customization = browserViewController.siteCustomization
+		switch event.keyCode {
+		case Self.zapKeyCode:
+			customization.startZapPicker()
+		case Self.customizeKeyCode:
+			customization.toggleCustomizationPanel()
+		case Self.copyCleanLinkKeyCode:
+			customization.copyCleanLink()
+		default:
+			return false
+		}
+		return true
 	}
 }

@@ -5,15 +5,15 @@ import SwiftUI
 /// Everything the panel needs from the browser, so it stays free of CEF and BrowserView.
 @MainActor
 public struct SiteCustomizationPanelActions {
-	public var startZapPicker: () -> Void
+	public var startZapPicker: @MainActor () -> Void
 	/// Counts elements matching a selector on the live page (nil while unknown).
-	public var countMatches: (String) async -> Int?
-	public var dismiss: () -> Void
+	public var countMatches: @MainActor (String) async -> Int?
+	public var dismiss: @MainActor () -> Void
 
 	public init(
-		startZapPicker: @escaping () -> Void,
-		countMatches: @escaping (String) async -> Int?,
-		dismiss: @escaping () -> Void
+		startZapPicker: @escaping @MainActor () -> Void,
+		countMatches: @escaping @MainActor (String) async -> Int?,
+		dismiss: @escaping @MainActor () -> Void
 	) {
 		self.startZapPicker = startZapPicker
 		self.countMatches = countMatches
@@ -22,7 +22,7 @@ public struct SiteCustomizationPanelActions {
 }
 
 public struct SiteCustomizationPanel: View {
-	@Bindable private var store: BoostStore
+	private let store: BoostStore
 	private let url: URL
 	private let actions: SiteCustomizationPanelActions
 
@@ -145,10 +145,10 @@ public struct SiteCustomizationPanel: View {
 							.font(.callout.weight(.medium))
 							.padding(.horizontal, 10)
 							.padding(.vertical, 6)
-							.foregroundStyle(isOn ? .white : .primary)
+							.foregroundStyle(isOn ? Color.white : Color.primary)
 							.background {
 								Capsule()
-									.fill(isOn ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(.quaternary))
+									.fill(isOn ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(Color.secondary.opacity(0.14)))
 							}
 							.scaleEffect(isOn ? 1.0 : 0.97)
 					}
@@ -190,7 +190,7 @@ public struct SiteCustomizationPanel: View {
 							if let count = matchCounts[selector] {
 								Text(count < 0 ? "invalid" : "\(count)")
 									.font(.caption2.monospacedDigit())
-									.foregroundStyle(count == 0 || count < 0 ? .orange : .secondary)
+									.foregroundStyle(count <= 0 ? Color.orange : Color.secondary)
 									.help(count < 0 ? "Not a valid selector" : "\(count) element(s) hidden on this page")
 							}
 							Button {
@@ -203,7 +203,7 @@ public struct SiteCustomizationPanel: View {
 						}
 						.padding(.horizontal, 10)
 						.padding(.vertical, 6)
-						.background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+						.background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 						.transition(.asymmetric(
 							insertion: .scale(scale: 0.9).combined(with: .opacity),
 							removal: .move(edge: .trailing).combined(with: .opacity)
@@ -348,7 +348,12 @@ public struct SiteCustomizationPanel: View {
 			draft[keyPath: keyPath]
 		} set: { value in
 			draft[keyPath: keyPath] = value
-			debounced ? scheduleSave() : commit()
+			if debounced {
+				scheduleSave()
+			}
+			else {
+				commit()
+			}
 		}
 	}
 

@@ -6,7 +6,7 @@ import ModelKit
 @MainActor
 struct BrowserPageLifecycleHooks {
 	/// Main frame committed a new URL (fires for same-document navigations too).
-	var didCommit: ((BrowserTabID, CEFBridgeBrowserRef, String) -> Void)?
+	var didCommit: (@MainActor (BrowserTabID, CEFBridgeBrowserRef, String) -> Void)?
 	/// Navigation state was re-read; `isLoading` false after true means the load finished.
-	var didSyncLoadingState: ((BrowserTabID, CEFBridgeBrowserRef, Bool) -> Void)?
+	var didSyncLoadingState: (@MainActor (BrowserTabID, CEFBridgeBrowserRef, Bool) -> Void)?
 }
