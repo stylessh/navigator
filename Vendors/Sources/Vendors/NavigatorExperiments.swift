@@ -79,6 +79,18 @@ public final class NavigatorExperiments {
 		defaults.set(isEnabled, forKey: experiment.defaultsKey)
 	}
 
+	/// Turns every experiment on or off at once (Settings → Experiments master switch).
+	public func setAllEnabled(_ isEnabled: Bool) {
+		for experiment in NavigatorExperiment.all {
+			setEnabled(experiment, isEnabled)
+		}
+	}
+
+	/// Number of experiments currently on.
+	public var enabledCount: Int {
+		NavigatorExperiment.all.filter { isEnabled($0) }.count
+	}
+
 	public func resetAll() {
 		for experiment in NavigatorExperiment.all {
 			defaults.removeObject(forKey: experiment.defaultsKey)
