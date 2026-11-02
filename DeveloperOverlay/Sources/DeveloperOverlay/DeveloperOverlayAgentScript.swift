@@ -540,6 +540,14 @@ public enum DeveloperOverlayAgentScript {
 	  // Polling --------------------------------------------------------------
 
 	  // The page's own accent, used to tint the overlay glass (meta theme-color, else the body background).
+	  function isColorful(css) {
+	    var m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(css);
+	    if (!m) { return false; }
+	    var r = +m[1] / 255, g = +m[2] / 255, b = +m[3] / 255;
+	    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+	    return max > 0 && (max - min) / max > 0.25;
+	  }
+
 	  function themeColor() {
 	    try {
 	      var meta = document.querySelector('meta[name="theme-color"]:not([media]), meta[name="theme-color"]');
@@ -553,12 +561,21 @@ public enum DeveloperOverlayAgentScript {
 	        if (resolved) { return resolved; }
 	      }
 	      // Otherwise the color of whatever sits along the top edge (a site header or nav bar).
-	      var top = document.elementFromPoint(Math.floor(window.innerWidth / 2), 4);
-	      for (var node = top, depth = 0; node && node.nodeType === 1 && depth < 6; node = node.parentElement, depth += 1) {
-	        if (node === document.body || node === document.documentElement) { break; }
-	        var fill = getComputedStyle(node).backgroundColor;
-	        if (fill && fill !== "rgba(0, 0, 0, 0)" && fill !== "transparent") { return fill; }
+	      // Probe a few rows, since body margins (8px on HN) push the bar below the very top, and
+	      // prefer a colorful fill over a neutral page wrapper.
+	      var rows = [4, 12, 24, 40];
+	      var neutral = null;
+	      for (var r = 0; r < rows.length; r += 1) {
+	        var top = document.elementFromPoint(Math.floor(window.innerWidth / 2), rows[r]);
+	        for (var node = top, depth = 0; node && node.nodeType === 1 && depth < 6; node = node.parentElement, depth += 1) {
+	          if (node === document.body || node === document.documentElement) { break; }
+	          var fill = getComputedStyle(node).backgroundColor;
+	          if (!fill || fill === "rgba(0, 0, 0, 0)" || fill === "transparent") { continue; }
+	          if (isColorful(fill)) { return fill; }
+	          if (!neutral) { neutral = fill; }
+	        }
 	      }
+	      if (neutral) { return neutral; }
 	      var candidates = [document.body, document.documentElement];
 	      for (var i = 0; i < candidates.length; i += 1) {
 	        if (!candidates[i]) { continue; }

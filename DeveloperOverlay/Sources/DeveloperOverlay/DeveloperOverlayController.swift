@@ -76,13 +76,21 @@ public final class DeveloperOverlayController {
 	private func observeViewportMode() {
 		withObservationTracking {
 			_ = model.viewportMode
+			_ = model.isPanelPresented
+			_ = model.isEnabled
 		} onChange: { [weak self] in
 			Task { @MainActor [weak self] in
 				guard let self else { return }
 				self.stage?.setMode(self.model.viewportMode, animated: true)
+				self.stage?.setTrailingReservation(self.panelReservation, animated: true)
 				self.observeViewportMode()
 			}
 		}
+	}
+
+	/// Panel width plus its trailing margin and a gap, so the framed page can slide clear of it.
+	private var panelReservation: CGFloat {
+		model.isEnabled && model.isPanelPresented ? 420 + 12 + 16 : 0
 	}
 
 	// MARK: Keyboard

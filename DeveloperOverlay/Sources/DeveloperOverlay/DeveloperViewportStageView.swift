@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 /// Wraps the browser view. In responsive mode it simply fills; with a viewport preset the page is
 /// framed at the preset size, centered on a subtle dotted stage, and the size change is driven by a
@@ -29,6 +30,27 @@ public final class DeveloperViewportStageView: NSView {
 	}
 
 	public private(set) var mode: DeveloperViewportMode = .responsive
+
+	/// Width taken by overlay chrome on the trailing side (the open panel). The framed page slides
+	/// left to stay clear of it when there's room, and never shrinks for it.
+	public private(set) var trailingReservation: CGFloat = 0
+
+	public func setTrailingReservation(_ width: CGFloat, animated: Bool) {
+		guard abs(width - trailingReservation) > 0.5 else { return }
+		trailingReservation = width
+		guard isFramed, animated, window != nil, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else {
+			needsLayout = true
+			return
+		}
+		NSAnimationContext.runAnimationGroup { context in
+			context.duration = 0.42
+			// Ease-out with a soft landing, close to the overlay's morph spring.
+			context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+			context.allowsImplicitAnimation = true
+			self.updateFramedCenter()
+			self.layoutSubtreeIfNeeded()
+		}
+	}
 
 	public init(contentView: NSView) {
 		self.contentView = contentView
@@ -178,11 +200,22 @@ public final class DeveloperViewportStageView: NSView {
 				animator.jump(to: target)
 			}
 		}
+		updateFramedCenter()
+		positionHandles()
+	}
+
+	private func updateFramedCenter() {
 		// Bias the frame down so it sits between the badge and the toolbar.
 		if let centerY = framedConstraints.first(where: { $0.firstAttribute == .centerY }) {
 			centerY.constant = (framedInsets.top - framedInsets.bottom) / 2
 		}
-		positionHandles()
+		// Slide left to clear the panel, but keep the left edge inside the stage.
+		if let centerX = framedConstraints.first(where: { $0.firstAttribute == .centerX }) {
+			let frameWidth = animator.value.width
+			let wanted = -trailingReservation / 2
+			let leftmost = framedInsets.left + frameWidth / 2 - bounds.width / 2
+			centerX.constant = min(0, max(wanted, leftmost))
+		}
 	}
 
 	// MARK: Stage chrome
