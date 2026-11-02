@@ -65,15 +65,17 @@ private struct CommandBarCard: View {
 			}
 		}
 		.frame(width: chrome.cardWidth)
-		.commandBarGlass(cornerRadius: CommandBarLayout.cornerRadius)
-		.shadow(color: .black.opacity(chrome.isShown ? 0.22 : 0), radius: 28, y: 14)
+		.commandBarGlass(cornerRadius: CommandBarLayout.cornerRadius, castsShadow: true)
 		// Taps on the card hit the card first, so they never reach the dismiss layer behind it.
 		.contentShape(RoundedRectangle(cornerRadius: CommandBarLayout.cornerRadius, style: .continuous))
-		.scaleEffect(chrome.isShown ? 1 : 0.92, anchor: isBottom ? .bottom : .top)
-		.offset(y: chrome.isShown ? 0 : (isBottom ? 18 : -10))
+		// Scale, offset and opacity only. The old entrance also animated a blur, which forced
+		// the whole glass card (and the hosted text field) through an offscreen pass on every
+		// frame of the spring: that was most of the stutter when the bar opened.
+		.scaleEffect(chrome.isShown ? 1 : 0.94, anchor: isBottom ? .bottom : .top)
+		.offset(y: chrome.isShown ? 0 : (isBottom ? 14 : -10))
 		.opacity(chrome.isShown ? 1 : 0)
-		.blur(radius: chrome.isShown ? 0 : 6)
-		.animation(CommandBarMotion.present, value: chrome.isShown)
+		// Entrances spring; exits are quicker and never bounce, so the bar gets out of the way.
+		.animation(chrome.isShown ? CommandBarMotion.present : CommandBarMotion.exit, value: chrome.isShown)
 		.animation(CommandBarMotion.resize, value: resultsHeight)
 	}
 
@@ -213,9 +215,15 @@ private struct CommandBarResultsList: View {
 				.padding(.vertical, CommandBarLayout.listVerticalPadding)
 			}
 			.scrollIndicators(.never)
+			// One transaction for the whole list, so the highlight slides between rows with
+			// matchedGeometryEffect. A per-row `.animation(value: isHighlighted)` animated the
+			// two rows separately, and the pill cross-faded instead of moving.
+			.animation(CommandBarMotion.highlight, value: model.highlightedItemID)
 			.onChange(of: model.highlightedItemID) { _, newValue in
 				guard let newValue else { return }
-				proxy.scrollTo(newValue)
+				withAnimation(CommandBarMotion.highlight) {
+					proxy.scrollTo(newValue)
+				}
 			}
 		}
 	}
@@ -269,7 +277,6 @@ private struct CommandBarRow: View {
 		}
 		.padding(.horizontal, 8)
 		.contentShape(Rectangle())
-		.animation(CommandBarMotion.highlight, value: isHighlighted)
 	}
 }
 

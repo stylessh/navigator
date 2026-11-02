@@ -29,6 +29,9 @@ final class BrowserFloatingToolbarState {
 	private(set) var isTabShelfPresented = false
 	/// Address pill frame in the hosting view's coordinate space (flipped, top-left origin).
 	var addressPillFrame: CGRect = .zero
+	/// The toolbar's laid-out frame (bar, shelf and padding) in the hosting view's space. The
+	/// host only claims clicks inside it. Not observed: nothing re-renders when it changes.
+	@ObservationIgnored var interactiveFrame: CGRect = .zero
 	/// Extra buttons rendered after the tab cluster (e.g. user actions from other modules).
 	var trailingAccessories: [BrowserFloatingToolbarAccessory] = []
 

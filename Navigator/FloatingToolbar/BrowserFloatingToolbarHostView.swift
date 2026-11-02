@@ -1,22 +1,29 @@
 import AppKit
 import SwiftUI
 
-/// Hosts the SwiftUI toolbar inside the AppKit window, sized to the toolbar's own content so it
-/// only intercepts clicks where the glass actually is.
+/// Hosts the SwiftUI toolbar inside the AppKit window.
+///
+/// The host is a fixed, transparent canvas along the bottom of the window (see
+/// `canvasHeight`), and the toolbar lays itself out at the bottom-center of it. It used to be
+/// sized to the toolbar's intrinsic size, but then every expand, collapse or shelf toggle
+/// resized the NSView to the final size in one step while SwiftUI was still springing the
+/// content, so the glass clipped and the bar jumped vertically mid-animation. With a fixed
+/// canvas the window never re-lays out during a morph, and `hitTest` only claims clicks
+/// inside the toolbar itself so the page underneath keeps everything else.
 final class BrowserFloatingToolbarHostView: NSHostingView<BrowserFloatingToolbarView> {
+	/// Tall enough for the tab shelf above the bar plus spring overshoot and glass shadow.
+	static let canvasHeight: CGFloat = 220
+
+	/// The toolbar's interactive frame in this view's (flipped, SwiftUI global) space.
+	var interactiveRect: () -> CGRect = { .zero }
+
 	required init(rootView: BrowserFloatingToolbarView) {
 		super.init(rootView: rootView)
-		sizingOptions = [.intrinsicContentSize]
+		sizingOptions = []
 		safeAreaRegions = []
 		translatesAutoresizingMaskIntoConstraints = false
-		setContentHuggingPriority(.required, for: .horizontal)
-		setContentHuggingPriority(.required, for: .vertical)
-		// Keep the toolbar's intrinsic size out of the window's fitting-size calculation.
-		// Otherwise assigning the root view controller to a window shrinks the window to the
-		// toolbar's size (~440×N) on a first launch with no saved frame.
-		let belowFittingSize = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.fittingSizeCompression.rawValue - 1)
-		setContentCompressionResistancePriority(belowFittingSize, for: .horizontal)
-		setContentCompressionResistancePriority(belowFittingSize, for: .vertical)
+		wantsLayer = true
+		layer?.backgroundColor = NSColor.clear.cgColor
 	}
 
 	@available(*, unavailable)
@@ -26,6 +33,15 @@ final class BrowserFloatingToolbarHostView: NSHostingView<BrowserFloatingToolbar
 
 	override var mouseDownCanMoveWindow: Bool {
 		false
+	}
+
+	override func hitTest(_ point: NSPoint) -> NSView? {
+		guard let superview else { return nil }
+		let local = convert(point, from: superview)
+		// SwiftUI reports frames with a top-left origin.
+		let swiftUIPoint = isFlipped ? local : CGPoint(x: local.x, y: bounds.height - local.y)
+		guard interactiveRect().contains(swiftUIPoint) else { return nil }
+		return super.hitTest(point)
 	}
 
 	/// Converts a rect in this view's (flipped, SwiftUI global) space to screen coordinates.

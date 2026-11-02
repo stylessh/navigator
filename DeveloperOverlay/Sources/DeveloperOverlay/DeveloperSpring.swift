@@ -15,9 +15,9 @@ public struct DeveloperSpring: Equatable, Sendable {
 	}
 
 	/// Shape changes: viewport resizes, panel open/close.
-	public static let morph = DeveloperSpring(response: 0.42, dampingFraction: 0.8)
+	public static let morph = DeveloperSpring(response: 0.4, dampingFraction: 0.82)
 	/// Small, snappy feedback.
-	public static let snappy = DeveloperSpring(response: 0.26, dampingFraction: 0.84)
+	public static let snappy = DeveloperSpring(response: 0.24, dampingFraction: 0.86)
 
 	var stiffness: Double {
 		let omega = 2 * Double.pi / response

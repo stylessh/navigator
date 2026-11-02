@@ -70,9 +70,9 @@ public struct SiteCustomizationPanel: View {
 		.padding(18)
 		.frame(width: 340)
 		.navigatorGlass(cornerRadius: 26, tint: draft.tint == .automatic ? nil : accent)
-		.scaleEffect(appeared ? 1 : 0.92, anchor: .topTrailing)
+		// No blur in the entrance: blurring the glass panel renders it offscreen on every frame.
+		.scaleEffect(appeared ? 1 : 0.94, anchor: .topTrailing)
 		.opacity(appeared ? 1 : 0)
-		.blur(radius: appeared ? 0 : 6)
 		.onAppear {
 			withAnimation(.navigatorBouncy) { appeared = true }
 			refreshMatchCounts()
@@ -85,7 +85,9 @@ public struct SiteCustomizationPanel: View {
 			}
 		}
 		.onExitCommand(perform: close)
-		.animation(.navigatorSnappy, value: draft)
+		// No blanket `.animation(value: draft)`: it animated every keystroke in the CSS and
+		// JavaScript editors, so typing made the panel wobble. Discrete edits animate
+		// explicitly in `update(_:)` and `binding(_:)` instead.
 	}
 
 	// MARK: Sections
@@ -241,7 +243,7 @@ public struct SiteCustomizationPanel: View {
 	private var code: some View {
 		VStack(alignment: .leading, spacing: 8) {
 			Button {
-				withAnimation(.navigatorSnappy) { showsCode.toggle() }
+				withAnimation(.navigatorBouncy) { showsCode.toggle() }
 			} label: {
 				HStack {
 					Text("Custom CSS & script").font(.subheadline.weight(.semibold))
@@ -347,7 +349,13 @@ public struct SiteCustomizationPanel: View {
 		Binding {
 			draft[keyPath: keyPath]
 		} set: { value in
-			draft[keyPath: keyPath] = value
+			if debounced {
+				// Typing: no animation, or every keystroke re-springs the panel.
+				draft[keyPath: keyPath] = value
+			}
+			else {
+				withAnimation(.navigatorBouncy) { draft[keyPath: keyPath] = value }
+			}
 			if debounced {
 				scheduleSave()
 			}
@@ -392,7 +400,7 @@ public struct SiteCustomizationPanel: View {
 
 	private func close() {
 		commit()
-		withAnimation(.navigatorSnappy) { appeared = false }
+		withAnimation(.navigatorExit) { appeared = false }
 		Task { @MainActor in
 			try? await Task.sleep(for: .milliseconds(180))
 			actions.dismiss()

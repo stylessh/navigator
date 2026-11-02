@@ -19,6 +19,24 @@ extension View {
 		modifier(FloatingGlassModifier(shape: shape, tint: tint, interactive: interactive))
 	}
 
+	/// Insertion/removal for a glass shape inside a `FloatingGlassContainer`.
+	///
+	/// On macOS 26 the glass morphs out of (and back into) its neighbours with
+	/// `glassEffectTransition(.matchedGeometry)`, with a plain fade for the content. Stacking a
+	/// scale transition on top of that, as before, fought the morph: the shape interpolated its
+	/// frame while the scale shrank it again, which read as a pinch. macOS 15 has no glass
+	/// morph, so it keeps `fallback`.
+	@ViewBuilder
+	func floatingGlassTransition(fallback: AnyTransition) -> some View {
+		if #available(macOS 26.0, *) {
+			glassEffectTransition(.matchedGeometry)
+				.transition(.opacity)
+		}
+		else {
+			transition(fallback)
+		}
+	}
+
 	/// Gives a glass shape a stable identity so it morphs (instead of cross-fading) when it
 	/// appears, disappears, or changes size inside a `FloatingGlassContainer`.
 	@ViewBuilder
@@ -34,6 +52,8 @@ extension View {
 
 private struct FloatingGlassModifier<S: Shape>: ViewModifier {
 	@Environment(\.browserSiteTint) private var siteTint
+	/// What the glass actually shows; trails `siteTint` with the tint spring.
+	@State private var shownTint: BrowserSiteTint?
 	let shape: S
 	let tint: Color?
 	let interactive: Bool
@@ -47,12 +67,24 @@ private struct FloatingGlassModifier<S: Shape>: ViewModifier {
 		else {
 			opacity = BrowserSiteTintStyle.glassWashOpacity
 		}
-		return siteTint.map { $0.color.swiftUIColor.opacity(opacity) }
+		return shownTint.map { $0.color.swiftUIColor.opacity(opacity) }
 	}
 
 	func body(content: Content) -> some View {
 		glass(content, tint: resolvedTint)
-			.animation(BrowserSiteTintStyle.animation, value: siteTint)
+			// The tint springs in its own transaction. A plain `.animation(_:value: siteTint)`
+			// here also animated every other change that landed in the same update (address
+			// text, pill width, an expand/collapse) with the slow tint curve, so a tint arriving
+			// mid-morph made the toolbar change speed halfway through.
+			.onChange(of: siteTint, initial: true) { oldValue, newValue in
+				guard oldValue != newValue else {
+					shownTint = newValue
+					return
+				}
+				withAnimation(FloatingMotion.tint) {
+					shownTint = newValue
+				}
+			}
 	}
 
 	@ViewBuilder
@@ -102,12 +134,18 @@ struct FloatingGlassContainer<Content: View>: View {
 }
 
 /// Shared spring curves so every piece of floating chrome moves with the same physics.
+/// The values are Navigator's motion tokens (docs/browser/motion.md); every experiment's
+/// motion enum uses the same numbers.
 @MainActor
 enum FloatingMotion {
-	/// Shape morphs: expand/collapse, shelves appearing.
-	static let morph = Animation.spring(response: 0.42, dampingFraction: 0.78)
+	/// Shape morphs: expand/collapse, shelves and panels appearing.
+	static let morph = Animation.spring(response: 0.4, dampingFraction: 0.82)
+	/// Layout that follows content: lists and rows being added or removed.
+	static let reflow = Animation.spring(response: 0.32, dampingFraction: 0.9)
 	/// Small, snappy feedback: hover highlights, selection changes.
-	static let snappy = Animation.spring(response: 0.26, dampingFraction: 0.82)
+	static let snappy = Animation.spring(response: 0.24, dampingFraction: 0.86)
 	/// Press-down feedback on buttons, slightly bouncy.
-	static let press = Animation.spring(response: 0.2, dampingFraction: 0.58)
+	static let press = Animation.spring(response: 0.18, dampingFraction: 0.64)
+	/// Color changes (site tint). Critically damped so colors never overshoot.
+	static let tint = BrowserSiteTintStyle.animation
 }

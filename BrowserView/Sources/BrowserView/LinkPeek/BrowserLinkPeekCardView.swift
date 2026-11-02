@@ -48,6 +48,23 @@ final class BrowserLinkPeekCardView: NSView {
 		false
 	}
 
+	override func layout() {
+		super.layout()
+		// An explicit shadow path. Without one Core Animation derives the 30pt shadow from the
+		// alpha of every sublayer (glass, live web content) on every frame, offscreen, which is
+		// what made the card stutter while it sprang in, was dragged, or flew out.
+		let radius = BrowserLinkPeekGeometry.cardCornerRadius
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		layer?.shadowPath = CGPath(
+			roundedRect: bounds,
+			cornerWidth: min(radius, bounds.width / 2),
+			cornerHeight: min(radius, bounds.height / 2),
+			transform: nil
+		)
+		CATransaction.commit()
+	}
+
 	func setTitle(_ title: String?, url: String) {
 		let host = URL(string: url)?.host(percentEncoded: false) ?? url
 		let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

@@ -19,6 +19,8 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 	private let queryField = CommandBarTextField()
 	private weak var lastParentWindow: NSWindow?
 	private var isPanelVisible = false
+	/// Set while the exit spring plays; the window orders out when it fires.
+	private var pendingOrderOut: DispatchWorkItem?
 	private var isSynchronizingFromViewModel = false
 	private var lastAppliedPresentationSeed: UUID?
 	private var lastAppliedReplacementSeed: UUID?
@@ -206,6 +208,10 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 		layoutPanel(in: parentWindow)
 
 		let wasVisible = isPanelVisible
+		let wasExiting = pendingOrderOut != nil
+		pendingOrderOut?.cancel()
+		pendingOrderOut = nil
+		ignoresMouseEvents = false
 		isPanelVisible = true
 		makeKeyAndOrderFront(nil)
 
@@ -216,6 +222,11 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 		}
 
 		guard !wasVisible else { return }
+		if wasExiting {
+			// Reopened mid-exit: spring back from wherever the card is instead of restarting.
+			chrome.isShown = true
+			return
+		}
 		chrome.isShown = false
 		// Next runloop turn, so SwiftUI has a frame at the hidden state to spring from.
 		DispatchQueue.main.async { [weak self] in
@@ -230,12 +241,24 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 		chrome.isShown = false
 
 		let parentWindow = lastParentWindow
-		let wasKey = isKeyWindow
-		parentWindow?.removeChildWindow(self)
-		orderOut(nil)
-		if let parentWindow, parentWindow.isVisible, wasKey {
+		// Focus and clicks go back to the page right away; only the picture lingers while
+		// the card springs out. Ordering out immediately (as before) cut the card off
+		// mid-frame, so closing the bar always looked like a hard cut.
+		ignoresMouseEvents = true
+		if let parentWindow, parentWindow.isVisible, isKeyWindow {
 			parentWindow.makeKey()
 		}
+		let orderOutItem = DispatchWorkItem { [weak self, weak parentWindow] in
+			MainActor.assumeIsolated {
+				guard let self, !self.isPanelVisible else { return }
+				self.pendingOrderOut = nil
+				parentWindow?.removeChildWindow(self)
+				self.orderOut(nil)
+				self.ignoresMouseEvents = false
+			}
+		}
+		pendingOrderOut = orderOutItem
+		DispatchQueue.main.asyncAfter(deadline: .now() + CommandBarMotion.exitDuration, execute: orderOutItem)
 	}
 
 	override public func resignKey() {

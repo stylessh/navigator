@@ -58,8 +58,8 @@ struct BrowserFloatingToolbarView: View {
 			VStack(spacing: 10) {
 				if state.isTabShelfPresented {
 					tabShelf
-						.transition(
-							.asymmetric(
+						.floatingGlassTransition(
+							fallback: .asymmetric(
 								insertion: .scale(scale: 0.86, anchor: .bottom).combined(with: .opacity),
 								removal: .scale(scale: 0.92, anchor: .bottom).combined(with: .opacity)
 							)
@@ -75,10 +75,18 @@ struct BrowserFloatingToolbarView: View {
 		.onHover { isHovering in
 			state.setHovering(isHovering)
 		}
-		.animation(FloatingMotion.morph, value: state.isExpanded)
+		.onGeometryChange(for: CGRect.self) { proxy in
+			proxy.frame(in: .global)
+		} action: { frame in
+			state.interactiveFrame = frame
+		}
+		// One spring per kind of change. Tab switches don't get their own curve: they flash the
+		// toolbar open, and two different springs on the same frame is what made it wobble.
+		.animation(FloatingMotion.reflow, value: sidebarViewModel.tabs.count)
 		.animation(FloatingMotion.morph, value: state.isTabShelfPresented)
-		.animation(FloatingMotion.snappy, value: sidebarViewModel.selectedTabID)
-		.animation(FloatingMotion.snappy, value: sidebarViewModel.tabs.count)
+		.animation(FloatingMotion.morph, value: state.isExpanded)
+		// The host is a fixed canvas; the toolbar sits at its bottom-center.
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 		.environment(\.browserSiteTint, siteTintStore?.currentTint)
 	}
 
@@ -88,19 +96,19 @@ struct BrowserFloatingToolbarView: View {
 		HStack(spacing: Metrics.clusterSpacing) {
 			if state.isExpanded {
 				navigationCluster
-					.transition(.scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
+					.floatingGlassTransition(fallback: .scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
 			}
 
 			addressPill
 
 			if state.isExpanded {
 				tabsCluster
-					.transition(.scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
+					.floatingGlassTransition(fallback: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
 			}
 
 			if state.isExpanded, !state.trailingAccessories.isEmpty {
 				accessoryCluster
-					.transition(.scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
+					.floatingGlassTransition(fallback: .scale(scale: 0.6, anchor: .leading).combined(with: .opacity))
 			}
 		}
 		.gesture(WindowDragGesture())
@@ -129,7 +137,9 @@ struct BrowserFloatingToolbarView: View {
 				.frame(width: 16, height: 16)
 
 			Text(addressTitle)
-				.font(.system(size: state.isExpanded ? 13 : 12, weight: .medium))
+				// One size in both states: a font-size change can't interpolate, so it snapped
+				// mid-morph. The pill's width change carries the compact look on its own.
+				.font(.system(size: 13, weight: .medium))
 				.foregroundStyle(addressTitleIsPlaceholder ? .secondary : .primary)
 				.lineLimit(1)
 				.truncationMode(.middle)
@@ -460,28 +470,34 @@ private struct TabFavicon: View {
 }
 
 /// A soft highlight that sweeps along the bottom of the address pill while a page loads.
+///
+/// Driven by a timeline rather than a `repeatForever` animation: a repeating animation started
+/// in `onAppear` rides along in whatever transaction the pill is in, so the pill's own
+/// expand/collapse could pick up the loop, and it couldn't stop cleanly when loading ended.
 private struct LoadingSheen: View {
 	let isLoading: Bool
-	@State private var phase: CGFloat = -1
+	private static let period: Double = 1.1
 
 	var body: some View {
 		GeometryReader { proxy in
 			if isLoading {
-				LinearGradient(
-					colors: [.clear, Color.accentColor.opacity(0.85), .clear],
-					startPoint: .leading,
-					endPoint: .trailing
-				)
-				.frame(width: proxy.size.width * 0.4, height: 2)
-				.offset(x: phase * proxy.size.width, y: proxy.size.height - 2)
-				.onAppear {
-					phase = -0.4
-					withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: false)) {
-						phase = 1
-					}
+				TimelineView(.animation) { context in
+					let t = context.date.timeIntervalSinceReferenceDate
+						.truncatingRemainder(dividingBy: Self.period) / Self.period
+					// Ease in-out across the sweep, from just off the leading edge to past the trailing one.
+					let eased = 0.5 - cos(t * .pi) / 2
+					let phase = -0.4 + 1.4 * eased
+					LinearGradient(
+						colors: [.clear, Color.accentColor.opacity(0.85), .clear],
+						startPoint: .leading,
+						endPoint: .trailing
+					)
+					.frame(width: proxy.size.width * 0.4, height: 2)
+					.offset(x: phase * proxy.size.width, y: proxy.size.height - 2)
 				}
 				.transition(.opacity)
 			}
 		}
+		.animation(FloatingMotion.snappy, value: isLoading)
 	}
 }

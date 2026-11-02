@@ -25,6 +25,7 @@ final class BrowserLinkHintOverlayView: NSView {
 		chipLayer.frame = bounds
 		chipLayer.autoresizingMask = [.width, .height]
 		addSubview(chipLayer)
+		springs.hostView = self
 		setAccessibilityElement(true)
 		setAccessibilityRole(.group)
 		setAccessibilityLabel("Link hints")
@@ -442,8 +443,15 @@ final class BrowserLinkHintChipView: NSView {
 
 /// Minimal main-thread spring integrator for properties Core Animation cannot drive on glass
 /// (view frames). Uses SwiftUI-style `response` / `dampingRatio` parameters.
+///
+/// Ticks on the host view's display link, so every step lands on a real frame. It used to run
+/// on a 120 Hz `Timer`, which drifts against the display's refresh and skipped or doubled
+/// frames, the "judder" in the hints popping in.
 @MainActor
-final class BrowserLinkHintSpringDriver {
+final class BrowserLinkHintSpringDriver: NSObject {
+	/// The view whose display link drives the springs. Without one (no window yet) a timer is used.
+	weak var hostView: NSView?
+
 	private struct Spring {
 		var value: CGFloat
 		var velocity: CGFloat
@@ -457,6 +465,7 @@ final class BrowserLinkHintSpringDriver {
 
 	private var springs = [ObjectIdentifier: Spring]()
 	private var timer: Timer?
+	private var displayLink: CADisplayLink?
 	private var lastTick: CFTimeInterval = 0
 
 	func animate(
@@ -486,8 +495,14 @@ final class BrowserLinkHintSpringDriver {
 	}
 
 	private func startTimerIfNeeded() {
-		guard timer == nil else { return }
+		guard timer == nil, displayLink == nil else { return }
 		lastTick = CACurrentMediaTime()
+		if let hostView, hostView.window != nil {
+			let link = hostView.displayLink(target: self, selector: #selector(displayLinkFired(_:)))
+			link.add(to: .main, forMode: .common)
+			displayLink = link
+			return
+		}
 		let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
 			guard let self else {
 				timer.invalidate()
@@ -499,6 +514,17 @@ final class BrowserLinkHintSpringDriver {
 		}
 		RunLoop.main.add(timer, forMode: .common)
 		self.timer = timer
+	}
+
+	@objc private func displayLinkFired(_: CADisplayLink) {
+		tick()
+	}
+
+	private func stopTicking() {
+		timer?.invalidate()
+		timer = nil
+		displayLink?.invalidate()
+		displayLink = nil
 	}
 
 	private func tick() {
@@ -532,8 +558,7 @@ final class BrowserLinkHintSpringDriver {
 
 		finished.forEach { $0() }
 		if springs.isEmpty {
-			timer?.invalidate()
-			timer = nil
+			stopTicking()
 		}
 	}
 }
