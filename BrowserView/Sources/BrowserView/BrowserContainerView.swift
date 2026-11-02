@@ -4,6 +4,28 @@ import BrowserSidebar
 import ModelKit
 import Vendors
 
+@_silgen_name("CEFBridge_CopyViewSnapshotImage")
+private func browserContainerCopyViewSnapshotImage(_ view: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+
+private typealias BrowserContainerSnapshotCallback = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+
+@_silgen_name("CEFBridge_CapturePageSnapshot")
+private func browserContainerCapturePageSnapshot(
+	_ browser: UnsafeMutableRawPointer?,
+	_ timeoutSeconds: Double,
+	_ callback: BrowserContainerSnapshotCallback,
+	_ userData: UnsafeMutableRawPointer?
+) -> Int32
+
+private final class BrowserContainerSnapshotBox {
+	let completion: @MainActor (CGImage?) -> Void
+
+	init(completion: @escaping @MainActor (CGImage?) -> Void) {
+		self.completion = completion
+	}
+}
+
+
 private enum BrowserContentClippingFeatureFlag {
 	static let environmentKey = "NAVIGATOR_DISABLE_BROWSER_CONTENT_CLIPPING"
 
@@ -342,6 +364,39 @@ public final class BrowserContainerView: NSView {
 
 	public var browserRef: CEFBridgeBrowserRef? {
 		browser
+	}
+
+	/// A thumbnail of what this tab shows, for the spatial tab overview. Web pages are
+	/// captured by Chromium (DevTools `Page.captureScreenshot`); natively shown content
+	/// (images, PDFs) is captured from the window. Completion runs once, on the main actor.
+	func captureSpatialSnapshot(completion: @escaping @MainActor (CGImage?) -> Void) {
+		if let nativeView = topLevelNativeContentView {
+			guard isHiddenOrHasHiddenAncestor == false, window != nil,
+			      let raw = browserContainerCopyViewSnapshotImage(Unmanaged.passUnretained(nativeView).toOpaque())
+			else {
+				completion(nil)
+				return
+			}
+			completion(Unmanaged<CGImage>.fromOpaque(raw).takeRetainedValue())
+			return
+		}
+		guard let browser else {
+			completion(nil)
+			return
+		}
+		let box = Unmanaged.passRetained(BrowserContainerSnapshotBox(completion: completion))
+		let sent = browserContainerCapturePageSnapshot(browser, 1.5, { userData, image in
+			guard let userData else { return }
+			let box = Unmanaged<BrowserContainerSnapshotBox>.fromOpaque(userData).takeRetainedValue()
+			let cgImage = image.map { Unmanaged<CGImage>.fromOpaque($0).takeRetainedValue() }
+			MainActor.assumeIsolated {
+				box.completion(cgImage)
+			}
+		}, box.toOpaque())
+		if sent == 0 {
+			box.release()
+			completion(nil)
+		}
 	}
 
 	func setPermissionPrompt(
