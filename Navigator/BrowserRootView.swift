@@ -128,7 +128,9 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private func buildComposition() {
 		addChild(browserViewController)
 		// The developer overlay's viewport stage wraps the browser view (fills it unless a preset is on).
-		let browserView = developerOverlay.makeStage(for: browserViewController)
+		let browserView = developerOverlay.makeStage(for: browserViewController) { [sidebarViewModel] in
+			sidebarViewModel.isLoading
+		}
 		browserView.translatesAutoresizingMaskIntoConstraints = false
 		view.addSubview(browserView)
 

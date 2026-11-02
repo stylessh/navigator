@@ -12,13 +12,18 @@ public struct DeveloperOverlayPageBridge {
 	public var currentPageIdentity: @MainActor () -> AnyHashable?
 	/// Evaluates `script` in the page's main world and calls back with `(result, error)`.
 	public var evaluate: @MainActor (_ script: String, _ completion: @escaping @MainActor (String?, String?) -> Void) -> Void
+	/// True while the page is navigating. Background polls pause then: page scripts report back via
+	/// `window.prompt`, and a dialog opened mid-navigation can cancel a renderer-started navigation.
+	public var isPageLoading: @MainActor () -> Bool
 
 	public init(
 		currentPageIdentity: @escaping @MainActor () -> AnyHashable?,
-		evaluate: @escaping @MainActor (String, @escaping @MainActor (String?, String?) -> Void) -> Void
+		evaluate: @escaping @MainActor (String, @escaping @MainActor (String?, String?) -> Void) -> Void,
+		isPageLoading: @escaping @MainActor () -> Bool = { false }
 	) {
 		self.currentPageIdentity = currentPageIdentity
 		self.evaluate = evaluate
+		self.isPageLoading = isPageLoading
 	}
 
 	public static let disconnected = DeveloperOverlayPageBridge(
@@ -361,7 +366,7 @@ public final class DeveloperOverlayModel {
 			pageIdentity = identity
 			resetForNewPage(clear: true)
 		}
-		guard identity != nil else { return }
+		guard identity != nil, bridge.isPageLoading() == false else { return }
 
 		isPollInFlight = true
 		defer { isPollInFlight = false }

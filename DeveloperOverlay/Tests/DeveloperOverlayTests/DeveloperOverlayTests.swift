@@ -189,6 +189,21 @@ final class DeveloperOverlayModelTests: XCTestCase {
 		XCTAssertTrue(model.consoleEntries.isEmpty)
 	}
 
+	func testPollPausesWhilePageIsLoading() async {
+		let page = FakePage()
+		var isLoading = true
+		var bridge = page.bridge
+		bridge.isPageLoading = { isLoading }
+		let model = DeveloperOverlayModel(bridge: bridge)
+		model.isEnabled = false
+		await model.pollOnce()
+		XCTAssertTrue(page.scripts.isEmpty)
+		isLoading = false
+		page.nextResults = [(#"{"rev":1}"#, nil)]
+		await model.pollOnce()
+		XCTAssertEqual(page.scripts.count, 1)
+	}
+
 	func testViewportCyclingAndRotation() {
 		let model = DeveloperOverlayModel()
 		model.cycleViewport()

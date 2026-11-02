@@ -13,6 +13,7 @@ final class NavigatorDeveloperOverlay {
 	let controller = DeveloperOverlayController()
 	private let pageChannel = NavigatorDeveloperOverlayPageChannel()
 	@Dependency(\.browserRuntime) private var browserRuntime
+	private weak var browserViewController: BrowserViewController?
 
 	var model: DeveloperOverlayModel {
 		controller.model
@@ -20,8 +21,12 @@ final class NavigatorDeveloperOverlay {
 
 	/// Wraps the browser view in a viewport stage and points the overlay at the selected tab.
 	/// Add the returned view where the browser view used to go.
-	func makeStage(for browserViewController: BrowserViewController) -> NSView {
+	func makeStage(
+		for browserViewController: BrowserViewController,
+		isPageLoading: @escaping @MainActor () -> Bool
+	) -> NSView {
 		let runtime = browserRuntime
+		self.browserViewController = browserViewController
 		controller.model.bridge = DeveloperOverlayPageBridge(
 			currentPageIdentity: { [weak browserViewController] in
 				browserViewController?.hostedBrowser.map { AnyHashable($0) }
@@ -32,7 +37,8 @@ final class NavigatorDeveloperOverlay {
 					return
 				}
 				self.pageChannel.evaluate(script, in: browser, runtime: runtime, completion: completion)
-			}
+			},
+			isPageLoading: isPageLoading
 		)
 		return controller.makeStage(wrapping: browserViewController.view)
 	}
@@ -101,9 +107,16 @@ final class NavigatorDeveloperOverlay {
 			Task { @MainActor [weak containerView] in
 				try? await Task.sleep(for: .seconds(4))
 				if let url = environment["NAVIGATOR_DEVOVERLAY_URL"] {
+					// Native load, like the address bar. A script-driven `location.assign` can be cancelled
+					// by the overlay's own polls (they report back through `window.prompt`).
 					log("navigate \(url)")
-					model.runInPage("location.assign(\(Self.jsString(url)))")
-					try? await Task.sleep(for: .seconds(5))
+					if let browser = self.browserViewController?.hostedBrowser {
+						self.browserRuntime.load(browser, url: url)
+					}
+					else {
+						log("navigate skipped: no browser")
+					}
+					try? await Task.sleep(for: .seconds(6))
 				}
 				if let tabName = environment["NAVIGATOR_DEVOVERLAY_OPEN"],
 				   let tab = DeveloperOverlayTab(rawValue: tabName) {
@@ -151,10 +164,6 @@ final class NavigatorDeveloperOverlay {
 					log("network \(entry.kind.rawValue) \(entry.status.map(String.init) ?? "-") \(entry.url.prefix(120))")
 				}
 			}
-		}
-
-		private static func jsString(_ value: String) -> String {
-			DeveloperOverlayAgentScript.jsStringLiteral(value)
 		}
 	#endif
 }
