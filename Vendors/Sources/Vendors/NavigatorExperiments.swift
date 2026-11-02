@@ -35,6 +35,7 @@ public extension NavigatorExperiment {
 		.developerOverlay,
 		.spatialTabOverview,
 		.spatialSplitPanes,
+		.siteCustomization,
 	]
 
 	static let floatingToolbarAutoHide = NavigatorExperiment(
