@@ -10,7 +10,7 @@ Example:
 
 ```bash
 swift Tools/CEFBuilder/main.swift \
-  --spec Vendor/CEF/BuildSpecs/cef_145_codec_arm64.json \
+  --spec Vendor/CEF/BuildSpecs/cef_156_codec_arm64.json \
   --work-dir ~/Library/Caches/Navigator/CEFSource \
   --output-dir Vendor/CEF/Artifacts \
   --cache-dir ~/Library/Caches/Navigator/CEFBuilds \
@@ -21,7 +21,7 @@ The command prints JSON to stdout:
 
 ```json
 {
-  "runtime": ".../Vendor/CEF/Artifacts/cef_binary_cef_145_codec_arm64_macosarm64.tar.bz2",
-  "client": ".../Vendor/CEF/Artifacts/cef_binary_cef_145_codec_arm64_macosarm64_client.tar.bz2"
+  "runtime": ".../Vendor/CEF/Artifacts/cef_binary_cef_156_codec_arm64_macosarm64.tar.bz2",
+  "client": ".../Vendor/CEF/Artifacts/cef_binary_cef_156_codec_arm64_macosarm64_client.tar.bz2"
 }
 ```

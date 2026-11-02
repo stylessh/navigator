@@ -70,7 +70,7 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "CEF_ARCHIVE_URL"
-            value = "file:///Users/rk/Developer/Navigator/Vendor/CEF/Artifacts/cef_binary_cef_145_codec_arm64_macosarm64.tar.bz2"
+            value = "file://$(PROJECT_DIR)/Vendor/CEF/Artifacts/cef_binary_cef_156_codec_arm64_macosarm64.tar.bz2"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
@@ -95,7 +95,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "CEF_CLIENT_ARCHIVE_URL"
-            value = "file:///Users/rk/Developer/Navigator/Vendor/CEF/Artifacts/cef_binary_cef_145_codec_arm64_macosarm64_client.tar.bz2"
+            value = "file://$(PROJECT_DIR)/Vendor/CEF/Artifacts/cef_binary_cef_156_codec_arm64_macosarm64_client.tar.bz2"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
