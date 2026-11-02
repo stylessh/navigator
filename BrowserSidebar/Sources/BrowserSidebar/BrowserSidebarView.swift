@@ -1295,7 +1295,7 @@ private final class BrowserSidebarSpacePagerView: NSScrollView {
 		}
 	}
 
-	private func navigate(to page: Int, completion: (() -> Void)? = nil) {
+	private func navigate(to page: Int) {
 		currentPage = page
 		isAnimating = true
 		let targetOrigin = NSPoint(x: CGFloat(page) * resolvedPageWidth(), y: 0)
@@ -1307,7 +1307,6 @@ private final class BrowserSidebarSpacePagerView: NSScrollView {
 			MainActor.assumeIsolated { [self] in
 				isAnimating = false
 				reflectScrolledClipView(contentView)
-				completion?()
 			}
 		}
 	}
