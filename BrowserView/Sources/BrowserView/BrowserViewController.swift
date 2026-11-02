@@ -298,6 +298,20 @@ final class BrowserChromeView: NSView {
 	private var activeManagedCameraFrameTabIDs = Set<BrowserTabID>()
 	private var browserProcessCameraScriptFallbackTabIDs = Set<BrowserTabID>()
 	private var rendererCameraRoutingTransportReadyTabIDs = Set<BrowserTabID>()
+	private lazy var linkPeekController = BrowserLinkPeekController(
+		dependencies: .init(
+			browserRuntime: browserRuntime,
+			selectedBrowser: { [weak self] in
+				self?.hostedBrowser
+			},
+			openInNewTab: { [weak self] url in
+				self?.sidebarViewModel.openNewTab(with: url, activate: true)
+			},
+			isEnabled: {
+				NavigatorExperiments.shared.isEnabled(.linkPeek)
+			}
+		)
+	)
 	private var rendererManagedFrameTransportReadyTabIDs = Set<BrowserTabID>()
 	private var nextManagedCameraFrameSequence: UInt64 = 1
 	private var lastManagedCameraFrameDeliveryTime: TimeInterval?
@@ -468,6 +482,9 @@ final class BrowserChromeView: NSView {
 		super.viewDidMoveToWindow()
 		window?.acceptsMouseMovedEvents = true
 		setupMouseMoveMonitor()
+		if window != nil {
+			linkPeekController.attach(hostView: browserContainerHost, overlayParent: self)
+		}
 		if tabLifecycleConfiguration.isEnabled {
 			setupInteractionMonitor()
 			setupWindowLifecycleObservers()
@@ -541,6 +558,7 @@ final class BrowserChromeView: NSView {
 		teardownMouseMoveMonitor()
 		teardownInteractionMonitor()
 		browserChromeViewModel.cancelPendingSidebarOpen()
+		linkPeekController.detach()
 	}
 
 	private func setupMouseMoveMonitor() {
