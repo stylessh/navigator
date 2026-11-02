@@ -59,12 +59,6 @@ public protocol BrowserRuntimeDriving: AnyObject {
 		script: String,
 		completion: @escaping @MainActor (String?, String?) -> Void
 	)
-	@discardableResult
-	func addPageCommandHandler(
-		for browser: CEFBridgeBrowserRef?,
-		name: String?,
-		handler: @escaping (BrowserRuntimePageCommand) -> Void
-	) -> BrowserRuntimePageCommandHandlerToken?
 	func evaluateJavaScriptInRendererWithResult(
 		_ browser: CEFBridgeBrowserRef?,
 		script: String,
@@ -148,15 +142,3 @@ public struct BrowserChromeEventMonitoring {
 }
 
 typealias BrowserContainerCreationScheduler = (@escaping () -> Void) -> DispatchWorkItem
-
-public extension BrowserRuntimeDriving {
-	/// Test doubles that predate page commands get a no-op.
-	@discardableResult
-	func addPageCommandHandler(
-		for browser: CEFBridgeBrowserRef?,
-		name: String?,
-		handler: @escaping (BrowserRuntimePageCommand) -> Void
-	) -> BrowserRuntimePageCommandHandlerToken? {
-		nil
-	}
-}
