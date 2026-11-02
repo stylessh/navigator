@@ -6,7 +6,8 @@ import QuartzCore
 ///
 /// Option-click a link, or force-click it on a trackpad, and the link opens in a floating
 /// Liquid Glass card over the page instead of navigating. Drag the card up (or flick it) to promote
-/// it to a real tab; drag it down, press Esc, or click outside to dismiss it. ⌘↩ promotes from the keyboard.
+/// it to a real tab; drag it down, press Esc, or click outside to dismiss it. ⌘↩ promotes from the keyboard,
+/// and ⌥⌘P peeks the link under the pointer.
 @MainActor
 final class BrowserLinkPeekController {
 	struct Dependencies {
@@ -58,6 +59,7 @@ final class BrowserLinkPeekController {
 	/// If there is no link, the click is replayed so the page still gets it.
 	private var pendingClick: (down: NSEvent, up: NSEvent?)?
 	private var hitTestGeneration = 0
+	private var pageCommandHandler: (runtime: BrowserRuntime, token: BrowserRuntimePageCommandHandlerToken?)?
 
 	var isPresented: Bool {
 		cardView != nil && isClosing == false
@@ -88,6 +90,8 @@ final class BrowserLinkPeekController {
 		}
 		eventMonitor = nil
 		pendingClick = nil
+		hitTestGeneration += 1
+		removePageCommandHandler()
 		dismiss(animated: false)
 	}
 
@@ -110,8 +114,12 @@ final class BrowserLinkPeekController {
 	}
 
 	private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
-		guard isPresented, event.window === hostView?.window else { return event }
+		guard event.window === hostView?.window else { return event }
 		let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+		if event.keyCode == 35, modifiers == [.option, .command] { // ⌥⌘P
+			return handlePeekShortcut() ? nil : event
+		}
+		guard isPresented else { return event }
 		switch event.keyCode {
 		case 53: // Esc
 			dismiss(animated: true)
@@ -163,33 +171,86 @@ final class BrowserLinkPeekController {
 	}
 
 	private func hitTest(at point: CGPoint, replayingClickIfMissed: Bool) {
+		runHitTest(
+			expression: BrowserLinkPeekHitTest.script(fx: point.x, fy: point.y),
+			replayingClickIfMissed: replayingClickIfMissed
+		)
+	}
+
+	private func runHitTest(expression: String, replayingClickIfMissed: Bool) {
 		guard let browser = dependencies.selectedBrowser() else {
 			if replayingClickIfMissed { replayPendingClick() }
 			return
 		}
 		hitTestGeneration += 1
 		let generation = hitTestGeneration
-		if replayingClickIfMissed {
-			// If the renderer is slow or hung, give the click back to the page instead of eating it.
-			Task { @MainActor [weak self] in
-				try? await Task.sleep(for: Self.hitTestTimeout)
-				guard let self, generation == self.hitTestGeneration, self.pendingClick != nil else { return }
-				self.hitTestGeneration += 1
-				self.replayPendingClick()
-			}
-		}
-		dependencies.browserRuntime.evaluateJavaScriptInRendererWithResult(
-			browser,
-			script: BrowserLinkPeekHitTest.script(fx: point.x, fy: point.y)
-		) { [weak self] result, _ in
+		// If the page is slow or never answers, give the click back to the page instead of eating it.
+		Task { @MainActor [weak self] in
+			try? await Task.sleep(for: Self.hitTestTimeout)
 			guard let self, generation == self.hitTestGeneration else { return }
-			guard let link = BrowserLinkPeekHitTest.parse(result) else {
-				if replayingClickIfMissed { self.replayPendingClick() }
-				return
-			}
-			self.pendingClick = nil
-			self.present(link)
+			self.finishHitTest(nil, generation: generation, replayingClickIfMissed: replayingClickIfMissed)
 		}
+
+		if let runtime = dependencies.browserRuntime as? BrowserRuntime {
+			// Preferred route: the page posts its answer back through the shared page command channel.
+			removePageCommandHandler()
+			pageCommandHandler = (
+				runtime,
+				runtime.addPageCommandHandler(for: browser, name: BrowserLinkPeekHitTest.pageCommandName) { [weak self] command in
+					guard let self, Int(command.arguments["id"] ?? "") == generation else { return }
+					self.finishHitTest(command.arguments["result"], generation: generation, replayingClickIfMissed: replayingClickIfMissed)
+				}
+			)
+			runtime.evaluateJavaScriptWithResult(
+				browser,
+				script: BrowserLinkPeekHitTest.pageCommandScript(
+					for: expression,
+					requestID: generation,
+					sendFunction: BrowserRuntimePageCommand.javaScriptSendFunction
+				)
+			) { _, _ in }
+			return
+		}
+
+		dependencies.browserRuntime.evaluateJavaScriptInRendererWithResult(browser, script: expression) { [weak self] result, _ in
+			self?.finishHitTest(result, generation: generation, replayingClickIfMissed: replayingClickIfMissed)
+		}
+	}
+
+	private func finishHitTest(_ result: String?, generation: Int, replayingClickIfMissed: Bool) {
+		guard generation == hitTestGeneration else { return }
+		hitTestGeneration += 1
+		removePageCommandHandler()
+		guard let link = BrowserLinkPeekHitTest.parse(result) else {
+			if replayingClickIfMissed { replayPendingClick() }
+			return
+		}
+		pendingClick = nil
+		present(link)
+	}
+
+	private func removePageCommandHandler() {
+		guard let handler = pageCommandHandler else { return }
+		pageCommandHandler = nil
+		if let token = handler.token {
+			handler.runtime.removePageCommandHandler(token)
+		}
+	}
+
+	/// ⌥⌘P peeks the link under the pointer. With NAVIGATOR_LINK_PEEK_DEBUG_FIRST_LINK=1 it peeks
+	/// the first visible link instead, so the feature can be driven from the keyboard alone.
+	private func handlePeekShortcut() -> Bool {
+		guard dependencies.isEnabled(), isPresented == false, pendingClick == nil, let hostView, let window = hostView.window
+		else { return false }
+		if ProcessInfo.processInfo.environment["NAVIGATOR_LINK_PEEK_DEBUG_FIRST_LINK"] == "1" {
+			runHitTest(expression: BrowserLinkPeekHitTest.firstVisibleLinkScript(), replayingClickIfMissed: false)
+			return true
+		}
+		let local = hostView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+		guard let point = BrowserLinkPeekGeometry.normalizedPoint(for: local, in: hostView.bounds, isFlipped: hostView.isFlipped)
+		else { return false }
+		hitTest(at: point, replayingClickIfMissed: false)
+		return true
 	}
 
 	private func replayPendingClick() {

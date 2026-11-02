@@ -109,3 +109,17 @@ final class BrowserLinkPeekGeometryTests: XCTestCase {
 		XCTAssertNil(BrowserLinkPeekGeometry.normalizedPoint(for: CGPoint(x: -1, y: 0), in: bounds, isFlipped: false))
 	}
 }
+
+final class BrowserLinkPeekPageCommandScriptTests: XCTestCase {
+	func testPageCommandScriptSendsResultWithRequestID() {
+		let script = BrowserLinkPeekHitTest.pageCommandScript(for: "EXPR", requestID: 42, sendFunction: "SEND")
+		XCTAssertTrue(script.contains("result = EXPR;"))
+		XCTAssertTrue(script.contains("(SEND)('linkPeek.hit', { id: '42', result: result });"))
+	}
+
+	func testFirstVisibleLinkScriptEmbedsHitTest() {
+		let script = BrowserLinkPeekHitTest.firstVisibleLinkScript()
+		XCTAssertTrue(script.contains("querySelectorAll('a[href]')"))
+		XCTAssertTrue(script.contains("elementFromPoint"))
+	}
+}
