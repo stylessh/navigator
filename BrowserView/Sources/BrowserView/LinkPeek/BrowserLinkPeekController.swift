@@ -30,9 +30,12 @@ final class BrowserLinkPeekController {
 		static let card = "navigator.linkPeek.transform"
 		static let opacity = "navigator.linkPeek.opacity"
 		static let backdrop = "navigator.linkPeek.backdrop"
+		static let page = "navigator.linkPeek.page"
 	}
 
 	private static let backdropOpacity: Float = 0.22
+	/// Like Arc's peek, the page behind the card recedes a little so the card reads as the focus.
+	private static let recededPageScale: CGFloat = 0.975
 	private static let forceClickStage = 2
 	private static let hitTestTimeout: Duration = .milliseconds(500)
 
@@ -285,12 +288,24 @@ final class BrowserLinkPeekController {
 		spring(cardLayer, to: CATransform3DIdentity, from: start, velocity: 0, parameters: Spring.present)
 		fade(cardLayer, to: 1, from: 0, duration: 0.18, key: TransformKey.opacity)
 		overlay.setBackdropOpacity(Self.backdropOpacity, animatedFrom: 0, duration: 0.25)
+		setPageReceded(true)
+	}
+
+	private func setPageReceded(_ isReceded: Bool) {
+		guard let hostView, let pageLayer = hostView.layer else { return }
+		let target = isReceded
+			? BrowserLinkPeekGeometry.transform(scale: Self.recededPageScale, translation: .zero, size: hostView.bounds.size)
+			: CATransform3DIdentity
+		let current = pageLayer.presentation()?.transform ?? pageLayer.transform
+		guard CATransform3DEqualToTransform(current, target) == false else { return }
+		spring(pageLayer, to: target, from: current, velocity: 0, parameters: Spring.settle, key: TransformKey.page)
 	}
 
 	func dismiss(animated: Bool) {
 		guard let card = cardView, let overlay = overlayView, isClosing == false else { return }
 		isClosing = true
 		previewContainer?.discardBrowser(stopLoad: true)
+		setPageReceded(false)
 		guard animated, let cardLayer = card.layer else {
 			tearDown()
 			return
@@ -326,6 +341,7 @@ final class BrowserLinkPeekController {
 			parameters: Spring.promote
 		)
 		overlay.setBackdropOpacity(0, animatedFrom: Self.backdropOpacity, duration: 0.2)
+		setPageReceded(false)
 
 		if let url {
 			dependencies.openInNewTab(url)
@@ -427,7 +443,8 @@ final class BrowserLinkPeekController {
 		to target: CATransform3D,
 		from start: CATransform3D,
 		velocity: CGFloat,
-		parameters: (mass: CGFloat, stiffness: CGFloat, damping: CGFloat)
+		parameters: (mass: CGFloat, stiffness: CGFloat, damping: CGFloat),
+		key: String = TransformKey.card
 	) -> TimeInterval {
 		let animation = CASpringAnimation(keyPath: "transform")
 		animation.mass = parameters.mass
@@ -438,9 +455,9 @@ final class BrowserLinkPeekController {
 		animation.toValue = NSValue(caTransform3D: target)
 		animation.duration = animation.settlingDuration
 		animation.isRemovedOnCompletion = true
-		layer.removeAnimation(forKey: TransformKey.card)
+		layer.removeAnimation(forKey: key)
 		setTransform(target, on: layer)
-		layer.add(animation, forKey: TransformKey.card)
+		layer.add(animation, forKey: key)
 		return animation.duration
 	}
 
