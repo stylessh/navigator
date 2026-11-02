@@ -377,17 +377,24 @@ final class SiteCustomizationPanelWindowController {
 	}
 
 	func dismiss() {
+		// Capture the panel itself, not self: callers drop this controller right after dismissing,
+		// and a weak self here left an invisible panel on screen swallowing clicks.
+		let panel = panel
 		NSAnimationContext.runAnimationGroup { context in
 			context.duration = 0.16
 			panel.animator().alphaValue = 0
-		} completionHandler: { [weak self] in
+		} completionHandler: {
 			MainActor.assumeIsolated {
-				self?.close()
+				Self.close(panel)
 			}
 		}
 	}
 
 	func close() {
+		Self.close(panel)
+	}
+
+	private static func close(_ panel: NSPanel) {
 		panel.parent?.removeChildWindow(panel)
 		panel.orderOut(nil)
 	}
