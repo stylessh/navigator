@@ -16,6 +16,7 @@ enum NavigatorKeyboardShortcutAction: Equatable {
 	case selectNextTab
 	case selectPreviousTab
 	case selectTab(index: Int)
+	case showLinkHints(openInNewTab: Bool)
 }
 
 enum NavigatorKeyboardShortcutResolver {
@@ -26,6 +27,9 @@ enum NavigatorKeyboardShortcutResolver {
 		rawCharacter: String?
 	) -> NavigatorKeyboardShortcutAction? {
 		let supportedModifiers = modifiers.intersection(.deviceIndependentFlagsMask)
+		if let linkHintsAction = linkHintsAction(for: keyCode, modifiers: supportedModifiers) {
+			return linkHintsAction
+		}
 		guard hasSupportedCommandModifiers(supportedModifiers) else { return nil }
 
 		let usesShift = supportedModifiers.contains(.shift)
@@ -104,10 +108,26 @@ enum NavigatorKeyboardShortcutResolver {
 		}
 	}
 
+	/// ⌥⌘F shows keyboard link hints, ⌥⇧⌘F opens the chosen link in a new tab. Matched by
+	/// key code because Option changes the produced character.
+	private static func linkHintsAction(
+		for keyCode: UInt16,
+		modifiers: NSEvent.ModifierFlags
+	) -> NavigatorKeyboardShortcutAction? {
+		guard keyCode == commandOptionFShortcut,
+		      modifiers.contains([.command, .option]),
+		      modifiers.contains(.control) == false
+		else {
+			return nil
+		}
+		return .showLinkHints(openInNewTab: modifiers.contains(.shift))
+	}
+
 	private static func hasSupportedCommandModifiers(_ modifiers: NSEvent.ModifierFlags) -> Bool {
 		modifiers.contains(.command) && modifiers.intersection([.control, .option]).isEmpty
 	}
 
+	private static let commandOptionFShortcut: UInt16 = .init(kVK_ANSI_F)
 	private static let commandNShortcut: UInt16 = .init(kVK_ANSI_N)
 	private static let commandLShortcut: UInt16 = .init(kVK_ANSI_L)
 	private static let commandTShortcut: UInt16 = .init(kVK_ANSI_T)
@@ -163,6 +183,7 @@ struct NavigatorKeyboardShortcutHandler {
 	var selectNextTab: () -> Void
 	var selectPreviousTab: () -> Void
 	var selectTabAtIndex: (Int) -> Void
+	var showLinkHints: (Bool) -> Void = { _ in }
 
 	func perform(_ action: NavigatorKeyboardShortcutAction) {
 		switch action {
@@ -192,6 +213,8 @@ struct NavigatorKeyboardShortcutHandler {
 			selectPreviousTab()
 		case let .selectTab(index):
 			selectTabAtIndex(index)
+		case let .showLinkHints(openInNewTab):
+			showLinkHints(openInNewTab)
 		}
 	}
 }

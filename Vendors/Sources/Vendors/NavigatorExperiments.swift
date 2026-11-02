@@ -30,6 +30,7 @@ public extension NavigatorExperiment {
 		.floatingToolbarAutoHide,
 		.linkPeek,
 		.siteTint,
+		.linkHints,
 	]
 
 	static let floatingToolbarAutoHide = NavigatorExperiment(
