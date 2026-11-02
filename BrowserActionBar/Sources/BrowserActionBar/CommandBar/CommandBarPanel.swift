@@ -287,13 +287,22 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 		case #selector(NSResponder.moveUp(_:)):
 			viewModel.moveHighlight(by: -1)
 			return true
-		case #selector(NSResponder.moveToEndOfDocument(_:)),
-		     #selector(NSResponder.moveForward(_:)):
+		case #selector(NSResponder.moveToEndOfDocument(_:)):
 			viewModel.moveHighlightToSection(by: 1)
 			return true
-		case #selector(NSResponder.moveToBeginningOfDocument(_:)),
-		     #selector(NSResponder.moveBackward(_:)):
+		case #selector(NSResponder.moveToBeginningOfDocument(_:)):
 			viewModel.moveHighlightToSection(by: -1)
+			return true
+		// ⌥↓ / ⌥↑ send moveForward:/moveBackward: followed by a paragraph move. ⌃F/⌃B send the
+		// same first selector, so only treat them as section jumps when Option is held.
+		case #selector(NSResponder.moveForward(_:)) where isOptionHeld:
+			viewModel.moveHighlightToSection(by: 1)
+			return true
+		case #selector(NSResponder.moveBackward(_:)) where isOptionHeld:
+			viewModel.moveHighlightToSection(by: -1)
+			return true
+		case #selector(NSResponder.moveToEndOfParagraph(_:)) where isOptionHeld,
+		     #selector(NSResponder.moveToBeginningOfParagraph(_:)) where isOptionHeld:
 			return true
 		case #selector(NSResponder.insertTab(_:)):
 			// Always swallow Tab so focus never leaves the field.
@@ -327,6 +336,11 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 			return false
 		}
 	}
+}
+
+@MainActor
+private var isOptionHeld: Bool {
+	NSApp.currentEvent?.modifierFlags.contains(.option) == true
 }
 
 private final class CommandBarTextField: NSTextField {
