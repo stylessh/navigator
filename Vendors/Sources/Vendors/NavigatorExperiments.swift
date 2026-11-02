@@ -28,6 +28,7 @@ public extension NavigatorExperiment {
 	/// Every experiment shown in Settings, in display order. Append new entries here.
 	static let all: [NavigatorExperiment] = [
 		.floatingToolbarAutoHide,
+		.commandBar,
 	]
 
 	static let floatingToolbarAutoHide = NavigatorExperiment(

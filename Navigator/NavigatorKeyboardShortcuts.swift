@@ -16,6 +16,7 @@ enum NavigatorKeyboardShortcutAction: Equatable {
 	case selectNextTab
 	case selectPreviousTab
 	case selectTab(index: Int)
+	case openCommandBar
 }
 
 enum NavigatorKeyboardShortcutResolver {
@@ -35,6 +36,8 @@ enum NavigatorKeyboardShortcutResolver {
 			return .openNewWindow
 		case (commandLShortcut, false):
 			return .openLocation
+		case (commandKShortcut, false):
+			return .openCommandBar
 		case (commandTShortcut, false):
 			return .openNewTab
 		case (commandTShortcut, true):
@@ -87,6 +90,8 @@ enum NavigatorKeyboardShortcutResolver {
 			return .openNewWindow
 		case "l":
 			return .openLocation
+		case "k":
+			return .openCommandBar
 		case "t":
 			return .openNewTab
 		case "p":
@@ -110,6 +115,7 @@ enum NavigatorKeyboardShortcutResolver {
 
 	private static let commandNShortcut: UInt16 = .init(kVK_ANSI_N)
 	private static let commandLShortcut: UInt16 = .init(kVK_ANSI_L)
+	private static let commandKShortcut: UInt16 = .init(kVK_ANSI_K)
 	private static let commandTShortcut: UInt16 = .init(kVK_ANSI_T)
 	private static let commandPShortcut: UInt16 = .init(kVK_ANSI_P)
 	private static let commandCShortcut: UInt16 = .init(kVK_ANSI_C)
@@ -163,6 +169,7 @@ struct NavigatorKeyboardShortcutHandler {
 	var selectNextTab: () -> Void
 	var selectPreviousTab: () -> Void
 	var selectTabAtIndex: (Int) -> Void
+	var openCommandBar: () -> Void = {}
 
 	func perform(_ action: NavigatorKeyboardShortcutAction) {
 		switch action {
@@ -192,6 +199,8 @@ struct NavigatorKeyboardShortcutHandler {
 			selectPreviousTab()
 		case let .selectTab(index):
 			selectTabAtIndex(index)
+		case .openCommandBar:
+			openCommandBar()
 		}
 	}
 }

@@ -14,7 +14,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var sidebarPanel: BrowserSidebarPanel?
 	private var sidebarPanelLeadingConstraint: NSLayoutConstraint?
 	private var sidebarPanelWidthConstraint: NSLayoutConstraint?
-	private var actionBarPanel: BrowserActionBarView?
+	private var actionBarPanel: (any NavigatorActionBarPanel)?
 	private var sidebarHideWorkItem: DispatchWorkItem?
 	private var toastHostView: NSHostingView<AnyView>?
 	private var floatingToolbarHostView: BrowserFloatingToolbarHostView?
@@ -91,11 +91,8 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		super.viewDidLoad()
 		configureSidebarPresentationTracking()
 		observeToastState()
-		actionBarPanel = BrowserActionBarView(viewModel: browserActionBarViewModel)
-		actionBarPanel?.updateAnchorWindow = { [weak self] in
-			self?.view.window
-		}
-		actionBarPanel?.attach(to: view.window)
+		installActionBarPanel()
+		observeCommandBarExperiment()
 		observeFloatingToolbarInputs()
 	}
 
@@ -135,6 +132,49 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 			browserView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
 			browserView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
 		])
+	}
+
+	/// The classic one-line location bar, or the command bar when its experiment is on.
+	/// Both drive the same `BrowserActionBarViewModel`.
+	private func installActionBarPanel() {
+		let useCommandBar = NavigatorExperiments.shared.isEnabled(.commandBar)
+		browserActionBarViewModel.dismiss()
+		actionBarPanel?.removeFromWindow()
+		browserActionBarViewModel.isCommandBarEnabled = useCommandBar
+
+		if useCommandBar {
+			let panel = CommandBarPanel(viewModel: browserActionBarViewModel)
+			panel.updateAnchorWindow = { [weak self] in
+				self?.view.window
+			}
+			panel.presentationAnchor = { [weak self] in
+				self?.addressPillScreenRect()
+			}
+			actionBarPanel = panel
+		}
+		else {
+			let panel = BrowserActionBarView(viewModel: browserActionBarViewModel)
+			panel.updateAnchorWindow = { [weak self] in
+				self?.view.window
+			}
+			actionBarPanel = panel
+		}
+		actionBarPanel?.attach(to: view.window)
+	}
+
+	private func observeCommandBarExperiment() {
+		let wasEnabled = NavigatorExperiments.shared.isEnabled(.commandBar)
+		withObservationTracking {
+			_ = NavigatorExperiments.shared.isEnabled(.commandBar)
+		} onChange: { [weak self] in
+			Task { @MainActor [weak self] in
+				guard let self else { return }
+				if NavigatorExperiments.shared.isEnabled(.commandBar) != wasEnabled {
+					self.installActionBarPanel()
+				}
+				self.observeCommandBarExperiment()
+			}
+		}
 	}
 
 	private func buildFloatingToolbar() {
@@ -554,3 +594,14 @@ private final class BrowserRootContainerView: NSView {
 		return super.hitTest(point)
 	}
 }
+
+/// Common surface of the two action bar presentations.
+@MainActor
+protocol NavigatorActionBarPanel: AnyObject {
+	func attach(to window: NSWindow?)
+	func removeFromWindow()
+	func repositionForCurrentWindow(window: NSWindow?)
+}
+
+extension BrowserActionBarView: NavigatorActionBarPanel {}
+extension CommandBarPanel: NavigatorActionBarPanel {}
