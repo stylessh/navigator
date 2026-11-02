@@ -86,8 +86,11 @@ apply on strict sites like GitHub. The JS test suite checks this against a stric
 
 1. **Declarative manifests (shipped here).** Safe and portable, and enough for "open this page in
    X" or small page scripts.
-2. **Command-bar integration.** The command bar lists `actions(for: .commandBar, matching: query)`
-   and shows `shortcutHint`.
+2. **Command-bar integration.** Whichever of this PR and the command bar PR (#6) merges second
+   maps actions into `AppViewModel.commandBarCommands()`. Pass every action with an empty query,
+   because the bar does its own fuzzy ranking:
+   `CommandBarCommand(id: "site:\(action.id)", title: action.title, symbolName: action.systemImage,
+   keywords: action.keywords, shortcut: action.shortcutHint) { siteCustomization.perform(actionID: action.id) }`.
 3. **Page menu.** A right-click "Page" submenu built from the `.pageMenu` placement.
 4. **Native plugin bundles (design only).** `.navigatorplugin` bundles that load in a separate
    XPC helper and talk over a narrow, versioned protocol (`NavigatorActionPerformer` is that
