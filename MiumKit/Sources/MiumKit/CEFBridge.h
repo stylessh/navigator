@@ -178,6 +178,19 @@ void CEFBridge_ExecuteJavaScriptInRendererWithResult(
 // shows on screen, or NULL. Main thread only. Caller must CFRelease the result.
 void* CEFBridge_CopyViewSnapshotImage(void* view);
 
+// `image` is a retained CGImageRef (as void*) or NULL; the callee owns it.
+typedef void (*CEFBridgeSnapshotCallback)(void* user_data, void* image);
+
+// Asks Chromium for a JPEG of the page's viewport via DevTools. Main thread only.
+// Returns 1 when a request was sent (callback fires exactly once, on the main thread,
+// with NULL on failure or timeout) or 0 when it could not be sent (callback never fires).
+int CEFBridge_CapturePageSnapshot(
+  CEFBridgeBrowserRef browser_ref,
+  double timeout_seconds,
+  CEFBridgeSnapshotCallback callback,
+  void* user_data
+);
+
 #ifdef __cplusplus
 }
 #endif

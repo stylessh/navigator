@@ -311,8 +311,18 @@ final class BrowserSpatialLayoutController: NSObject {
 	}
 
 	private func captureSnapshot(for tabID: BrowserTabID) {
-		guard isOverviewEnabled, let container = hooks.container(tabID), let image = container.captureSpatialSnapshot() else { return }
-		snapshots[tabID] = Self.downscaled(image, maxWidth: Self.snapshotMaxWidth * (hostView.window?.backingScaleFactor ?? 2) / 2)
+		guard isOverviewEnabled, let container = hooks.container(tabID) else { return }
+		let maxWidth = Self.snapshotMaxWidth * (hostView.window?.backingScaleFactor ?? 2) / 2
+		container.captureSpatialSnapshot { [weak self] image in
+			#if DEBUG
+				print("[Navigator][Spatial] page snapshot tab=\(tabID) result=\(image.map { "\($0.width)x\($0.height)" } ?? "nil")")
+			#endif
+			guard let self, let image else { return }
+			self.snapshots[tabID] = Self.downscaled(image, maxWidth: maxWidth)
+			if let overview = self.overview, overview.isDismissing == false {
+				overview.refreshContent(self.overviewItems())
+			}
+		}
 	}
 
 	private static func downscaled(_ image: CGImage, maxWidth: CGFloat) -> CGImage {

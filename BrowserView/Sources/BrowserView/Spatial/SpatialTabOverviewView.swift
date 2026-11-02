@@ -78,9 +78,12 @@ final class SpatialTabOverviewView: NSView {
 	}
 
 	private func build() {
+		// The overview always reads as a dark, focused space regardless of the page beneath
+		// (a light page under clear glass made white captions illegible).
+		appearance = NSAppearance(named: .darkAqua)
 		addSubview(backdrop)
 		dimView.wantsLayer = true
-		dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
+		dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
 		addSubview(dimView)
 
 		headerLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -148,6 +151,14 @@ final class SpatialTabOverviewView: NSView {
 				card.animateScale(to: 1, spring: SpatialMotion.reflow)
 			}
 		}
+	}
+
+	/// Updates card content (e.g. a thumbnail that just arrived) without touching layout.
+	func refreshContent(_ nextItems: [SpatialOverviewItem]) {
+		for item in nextItems {
+			cardsByID[item.id]?.update(item: item)
+		}
+		items = items.map { existing in nextItems.first { $0.id == existing.id } ?? existing }
 	}
 
 	private func applyFilter(animated: Bool) {
