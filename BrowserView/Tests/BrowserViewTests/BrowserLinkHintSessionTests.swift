@@ -33,6 +33,13 @@ final class BrowserLinkHintLabelGeneratorTests: XCTestCase {
 		XCTAssertTrue(labels.allSatisfy { $0.count <= 2 })
 	}
 
+	func testShortLabelsComeFirst() {
+		let labels = BrowserLinkHintLabelGenerator.labels(count: 41)
+		let lengths = labels.map(\.count)
+		XCTAssertEqual(lengths, lengths.sorted())
+		XCTAssertEqual(labels.first?.count, 1)
+	}
+
 	func testOnlyUsesAlphabetCharacters() {
 		let alphabet = Set(BrowserLinkHintLabelGenerator.defaultAlphabet)
 		let labels = BrowserLinkHintLabelGenerator.labels(count: 300)

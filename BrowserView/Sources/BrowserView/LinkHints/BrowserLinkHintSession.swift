@@ -26,9 +26,15 @@ enum BrowserLinkHintLabelGenerator {
 			}
 		}
 
+		// Shorter labels first, so the first targets in reading order get single letters, then
+		// by alphabet priority so home-row letters come before the rest.
+		let priority = Dictionary(uniqueKeysWithValues: alphabet.enumerated().map { ($1, $0) })
 		return hints[offset..<(offset + count)]
-			.sorted()
 			.map { String($0.reversed()) }
+			.sorted { lhs, rhs in
+				guard lhs.count == rhs.count else { return lhs.count < rhs.count }
+				return lhs.map { priority[$0, default: 0] }.lexicographicallyPrecedes(rhs.map { priority[$0, default: 0] })
+			}
 	}
 }
 

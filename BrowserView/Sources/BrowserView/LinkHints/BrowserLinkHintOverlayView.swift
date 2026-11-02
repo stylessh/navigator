@@ -15,6 +15,7 @@ final class BrowserLinkHintOverlayView: NSView {
 	private var chipsByHintID = [Int: BrowserLinkHintChipView]()
 	private let chipLayer: NSView
 	private var isFinishing = false
+	private let springs = BrowserLinkHintSpringDriver()
 
 	override init(frame frameRect: NSRect) {
 		chipLayer = Self.makeChipContainer()
@@ -76,18 +77,17 @@ final class BrowserLinkHintOverlayView: NSView {
 		chipsByHintID.removeAll()
 		chipParent.frame = chipLayer.bounds
 
-		let now = CACurrentMediaTime()
 		let height = max(bounds.height, 1)
 		for hint in hints {
-			let chip = BrowserLinkHintChipView(label: hint.label, kind: hint.kind)
+			let chip = BrowserLinkHintChipView(label: hint.label, kind: hint.kind, springs: springs)
 			let size = chip.fittingSize
 			let targetRect = hint.pageRect.applying(CGAffineTransform(scaleX: scale, y: scale))
-			chip.frame = Self.chipFrame(size: size, targetRect: targetRect, bounds: bounds)
+			chip.restingFrame = Self.chipFrame(size: size, targetRect: targetRect, bounds: bounds)
 			chipParent.addSubview(chip)
 			chipsByHintID[hint.id] = chip
 			// Stagger top-to-bottom so the hints "rain" in instead of popping all at once.
-			let delay = Double(min(max(chip.frame.minY / height, 0), 1)) * 0.07
-			chip.animateIn(beginTime: now + delay)
+			let delay = Double(min(max(chip.restingFrame.minY / height, 0), 1)) * 0.06
+			chip.animateIn(delay: delay)
 		}
 	}
 
@@ -124,11 +124,20 @@ final class BrowserLinkHintOverlayView: NSView {
 	}
 
 	func reject() {
-		let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
-		shake.values = [0, -7, 6, -4, 3, -1, 0]
-		shake.duration = 0.32
-		shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
-		chipLayer.layer?.add(shake, forKey: "reject")
+		// Glass ignores layer transforms, so shake by moving the container's frame: an
+		// underdamped spring kicked with a sideways velocity, settling back at zero offset.
+		let restingOrigin = bounds.origin
+		springs.animate(
+			key: ObjectIdentifier(chipLayer),
+			from: 0,
+			to: 0,
+			initialVelocity: -420,
+			response: 0.22,
+			dampingRatio: 0.28
+		) { [weak self] offset in
+			guard let self else { return }
+			self.chipLayer.frame.origin = CGPoint(x: restingOrigin.x + offset, y: restingOrigin.y)
+		}
 		NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
 	}
 
@@ -137,7 +146,7 @@ final class BrowserLinkHintOverlayView: NSView {
 		guard isFinishing == false else { return }
 		isFinishing = true
 		for (id, chip) in chipsByHintID where id != hintID {
-			chip.animateOut(duration: 0.12)
+			chip.animateOut()
 		}
 		chipsByHintID[hintID]?.animateActivation()
 		flashTarget(targetRect)
@@ -150,9 +159,9 @@ final class BrowserLinkHintOverlayView: NSView {
 	func dismiss(completion: @escaping @MainActor () -> Void) {
 		guard isFinishing == false else { return }
 		isFinishing = true
-		chipsByHintID.values.forEach { $0.animateOut(duration: 0.12) }
+		chipsByHintID.values.forEach { $0.animateOut() }
 		Task { @MainActor in
-			try? await Task.sleep(for: .seconds(0.12))
+			try? await Task.sleep(for: .seconds(0.16))
 			completion()
 		}
 	}
@@ -230,23 +239,37 @@ private final class FlippedView: NSView {
 	}
 }
 
-/// A single hint label rendered on Liquid Glass (macOS 26) or a blur material (macOS 15).
+/// A single hint label rendered on Liquid Glass (macOS 26+) or a dark blur material (macOS 15).
+///
+/// Glass is composited outside the view's own layer, so it ignores layer transforms and opacity.
+/// All motion therefore animates the view's frame (scale about the centre) with a spring, and
+/// hiding uses `isHidden`.
 @MainActor
 final class BrowserLinkHintChipView: NSView {
 	private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)
 	private static let horizontalPadding: CGFloat = 6
 	private static let verticalPadding: CGFloat = 2.5
 	private static let cornerRadius: CGFloat = 7
+	/// Dark tint so white labels stay readable on any page (about 9:1 on white).
+	private static let glassTint = NSColor(white: 0.06, alpha: 0.62)
+	private static let inputGlassTint = NSColor(srgbRed: 0.04, green: 0.22, blue: 0.55, alpha: 0.66)
 
 	private let label: String
 	private let textView = BrowserLinkHintLabelView()
+	private let springs: BrowserLinkHintSpringDriver
 	private var typedPrefixLength = 0
 	private var isShown = true
+	private var currentScale: CGFloat = 1
 
-	init(label: String, kind: BrowserLinkHintTarget.Kind) {
+	/// Final, full-size frame. The visible frame is this rect scaled about its centre.
+	var restingFrame: CGRect = .zero {
+		didSet { applyScale(currentScale) }
+	}
+
+	init(label: String, kind: BrowserLinkHintTarget.Kind, springs: BrowserLinkHintSpringDriver) {
 		self.label = label
+		self.springs = springs
 		super.init(frame: .zero)
-		wantsLayer = true
 		applyText()
 
 		// Size from the measured string, not NSTextField's intrinsic size: inside
@@ -257,6 +280,7 @@ final class BrowserLinkHintChipView: NSView {
 			height: ceil(textSize.height + Self.verticalPadding * 2)
 		)
 		frame = CGRect(origin: .zero, size: size)
+		restingFrame = frame
 		textView.frame = bounds
 		textView.autoresizingMask = [.width, .height]
 		let background = Self.makeBackground(kind: kind, size: size, content: textView)
@@ -272,14 +296,14 @@ final class BrowserLinkHintChipView: NSView {
 		fatalError("init(coder:) has not been implemented")
 	}
 
-	override var fittingSize: NSSize { frame.size }
+	override var fittingSize: NSSize { restingFrame.size }
 
 	override func hitTest(_ point: NSPoint) -> NSView? {
 		nil
 	}
 
 	private static func makeBackground(kind: BrowserLinkHintTarget.Kind, size: CGSize, content: NSView) -> NSView {
-		let tint: NSColor? = kind == .input ? NSColor.systemBlue.withAlphaComponent(0.18) : nil
+		let tint = kind == .input ? inputGlassTint : glassTint
 		#if compiler(>=6.2)
 			if #available(macOS 26.0, *) {
 				let glass = NSGlassEffectView()
@@ -292,7 +316,8 @@ final class BrowserLinkHintChipView: NSView {
 			}
 		#endif
 		let blur = NSVisualEffectView()
-		blur.material = .popover
+		blur.material = .hudWindow
+		blur.appearance = NSAppearance(named: .darkAqua)
 		blur.blendingMode = .withinWindow
 		blur.state = .active
 		blur.wantsLayer = true
@@ -300,14 +325,12 @@ final class BrowserLinkHintChipView: NSView {
 		blur.layer?.cornerCurve = .continuous
 		blur.layer?.masksToBounds = true
 		blur.layer?.borderWidth = 0.5
-		blur.layer?.borderColor = NSColor.separatorColor.cgColor
-		if let tint {
-			let tintView = NSView(frame: CGRect(origin: .zero, size: size))
-			tintView.wantsLayer = true
-			tintView.layer?.backgroundColor = tint.cgColor
-			tintView.autoresizingMask = [.width, .height]
-			blur.addSubview(tintView)
-		}
+		blur.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+		let tintView = NSView(frame: CGRect(origin: .zero, size: size))
+		tintView.wantsLayer = true
+		tintView.layer?.backgroundColor = tint.cgColor
+		tintView.autoresizingMask = [.width, .height]
+		blur.addSubview(tintView)
 		blur.addSubview(content)
 		return blur
 	}
@@ -318,14 +341,15 @@ final class BrowserLinkHintChipView: NSView {
 			string: display,
 			attributes: [
 				.font: Self.font,
-				.foregroundColor: NSColor.labelColor,
+				.foregroundColor: NSColor.white,
 				.kern: 0.6,
 			]
 		)
 		if typedPrefixLength > 0 {
+			// Already-typed letters recede so the next letter to press stands out.
 			attributed.addAttribute(
 				.foregroundColor,
-				value: NSColor.controlAccentColor,
+				value: NSColor.white.withAlphaComponent(0.38),
 				range: NSRange(location: 0, length: min(typedPrefixLength, display.utf16.count))
 			)
 		}
@@ -343,102 +367,174 @@ final class BrowserLinkHintChipView: NSView {
 
 	func setVisible(_ visible: Bool) {
 		guard visible != isShown else { return }
-		isShown = visible
 		if visible {
-			isHidden = false
-			animateIn(beginTime: CACurrentMediaTime())
+			animateIn(delay: 0)
 		}
 		else {
-			animateOut(duration: 0.14)
+			animateOut()
 		}
 	}
 
 	// MARK: Spring animations
 
-	private func scaleTransform(_ scale: CGFloat) -> CATransform3D {
-		let size = bounds.size
-		var transform = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
-		transform = CATransform3DScale(transform, scale, scale, 1)
-		return CATransform3DTranslate(transform, -size.width / 2, -size.height / 2, 0)
+	private func applyScale(_ scale: CGFloat) {
+		currentScale = scale
+		let size = CGSize(width: restingFrame.width * scale, height: restingFrame.height * scale)
+		frame = CGRect(
+			x: restingFrame.midX - size.width / 2,
+			y: restingFrame.midY - size.height / 2,
+			width: max(size.width, 0),
+			height: max(size.height, 0)
+		)
+		textView.alphaValue = min(max((scale - 0.5) * 2, 0), 1)
 	}
 
-	func animateIn(beginTime: CFTimeInterval) {
-		guard let layer else { return }
-		layer.removeAllAnimations()
-		layer.opacity = 1
-		layer.transform = CATransform3DIdentity
-
-		let scale = CASpringAnimation(perceptualDuration: 0.38, bounce: 0.32)
-		scale.keyPath = "transform"
-		scale.fromValue = NSValue(caTransform3D: scaleTransform(0.4))
-		scale.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-		scale.beginTime = beginTime
-		scale.fillMode = .backwards
-		scale.duration = scale.settlingDuration
-
-		let fade = CABasicAnimation(keyPath: "opacity")
-		fade.fromValue = 0
-		fade.toValue = 1
-		fade.duration = 0.14
-		fade.beginTime = beginTime
-		fade.fillMode = .backwards
-
-		layer.add(scale, forKey: "in.scale")
-		layer.add(fade, forKey: "in.fade")
+	private func animateScale(
+		to target: CGFloat,
+		from start: CGFloat? = nil,
+		delay: TimeInterval = 0,
+		response: CGFloat,
+		dampingRatio: CGFloat,
+		completion: (@MainActor () -> Void)? = nil
+	) {
+		springs.animate(
+			key: ObjectIdentifier(self),
+			from: start ?? currentScale,
+			to: target,
+			delay: delay,
+			response: response,
+			dampingRatio: dampingRatio,
+			apply: { [weak self] value in self?.applyScale(value) },
+			completion: completion
+		)
 	}
 
-	func animateOut(duration: CFTimeInterval) {
-		guard let layer else { return }
-		let fromTransform = layer.presentation()?.transform ?? layer.transform
-		let fromOpacity = layer.presentation()?.opacity ?? layer.opacity
-		layer.removeAllAnimations()
-		layer.opacity = 0
-		layer.transform = scaleTransform(0.6)
+	func animateIn(delay: TimeInterval) {
+		isShown = true
+		isHidden = false
+		applyScale(0.45)
+		animateScale(to: 1, from: 0.45, delay: delay, response: 0.34, dampingRatio: 0.62)
+	}
 
-		let scale = CASpringAnimation(perceptualDuration: duration * 2, bounce: 0)
-		scale.keyPath = "transform"
-		scale.fromValue = NSValue(caTransform3D: fromTransform)
-		scale.toValue = NSValue(caTransform3D: scaleTransform(0.6))
-		scale.duration = scale.settlingDuration
-
-		let fade = CABasicAnimation(keyPath: "opacity")
-		fade.fromValue = fromOpacity
-		fade.toValue = 0
-		fade.duration = duration
-
-		layer.add(scale, forKey: "out.scale")
-		layer.add(fade, forKey: "out.fade")
+	func animateOut() {
+		isShown = false
+		animateScale(to: 0.4, response: 0.16, dampingRatio: 1) { [weak self] in
+			guard let self, self.isShown == false else { return }
+			self.isHidden = true
+		}
 	}
 
 	func animateActivation() {
-		guard let layer else { return }
-		layer.removeAllAnimations()
-		layer.transform = scaleTransform(1.0)
-		layer.opacity = 0
-
-		let pop = CASpringAnimation(perceptualDuration: 0.3, bounce: 0.45)
-		pop.keyPath = "transform"
-		pop.fromValue = NSValue(caTransform3D: scaleTransform(1.0))
-		pop.toValue = NSValue(caTransform3D: scaleTransform(1.25))
-		pop.duration = 0.2
-
-		let fade = CAKeyframeAnimation(keyPath: "opacity")
-		fade.values = [1, 1, 0]
-		fade.keyTimes = [0, 0.5, 1]
-		fade.duration = 0.2
-
-		layer.add(pop, forKey: "activate.pop")
-		layer.add(fade, forKey: "activate.fade")
+		isShown = false
+		animateScale(to: 1.3, response: 0.18, dampingRatio: 0.7)
+		Task { @MainActor [weak self] in
+			try? await Task.sleep(for: .seconds(0.16))
+			guard let self, self.isShown == false else { return }
+			self.isHidden = true
+		}
 	}
 
 	private func pulse() {
-		guard let layer else { return }
-		let pulse = CASpringAnimation(perceptualDuration: 0.3, bounce: 0.5)
-		pulse.keyPath = "transform"
-		pulse.fromValue = NSValue(caTransform3D: scaleTransform(1.12))
-		pulse.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-		pulse.duration = pulse.settlingDuration
-		layer.add(pulse, forKey: "pulse")
+		applyScale(1.14)
+		animateScale(to: 1, from: 1.14, response: 0.3, dampingRatio: 0.5)
+	}
+}
+
+/// Minimal main-thread spring integrator for properties Core Animation cannot drive on glass
+/// (view frames). Uses SwiftUI-style `response` / `dampingRatio` parameters.
+@MainActor
+final class BrowserLinkHintSpringDriver {
+	private struct Spring {
+		var value: CGFloat
+		var velocity: CGFloat
+		var target: CGFloat
+		var startTime: CFTimeInterval
+		var stiffness: CGFloat
+		var damping: CGFloat
+		var apply: @MainActor (CGFloat) -> Void
+		var completion: (@MainActor () -> Void)?
+	}
+
+	private var springs = [ObjectIdentifier: Spring]()
+	private var timer: Timer?
+	private var lastTick: CFTimeInterval = 0
+
+	func animate(
+		key: ObjectIdentifier,
+		from start: CGFloat,
+		to target: CGFloat,
+		initialVelocity: CGFloat = 0,
+		delay: TimeInterval = 0,
+		response: CGFloat,
+		dampingRatio: CGFloat,
+		apply: @escaping @MainActor (CGFloat) -> Void,
+		completion: (@MainActor () -> Void)? = nil
+	) {
+		let omega = 2 * CGFloat.pi / max(response, 0.01)
+		springs[key] = Spring(
+			value: start,
+			velocity: initialVelocity,
+			target: target,
+			startTime: CACurrentMediaTime() + delay,
+			stiffness: omega * omega,
+			damping: 2 * dampingRatio * omega,
+			apply: apply,
+			completion: completion
+		)
+		apply(start)
+		startTimerIfNeeded()
+	}
+
+	private func startTimerIfNeeded() {
+		guard timer == nil else { return }
+		lastTick = CACurrentMediaTime()
+		let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
+			guard let self else {
+				timer.invalidate()
+				return
+			}
+			MainActor.assumeIsolated {
+				self.tick()
+			}
+		}
+		RunLoop.main.add(timer, forMode: .common)
+		self.timer = timer
+	}
+
+	private func tick() {
+		let now = CACurrentMediaTime()
+		let frameDelta = min(CGFloat(now - lastTick), 1.0 / 30.0)
+		lastTick = now
+		var finished = [(@MainActor () -> Void)]()
+
+		for (key, var spring) in springs {
+			guard now >= spring.startTime else { continue }
+			// Sub-step for stability with stiff springs.
+			let steps = 4
+			let dt = frameDelta / CGFloat(steps)
+			for _ in 0..<steps {
+				let force = -spring.stiffness * (spring.value - spring.target) - spring.damping * spring.velocity
+				spring.velocity += force * dt
+				spring.value += spring.velocity * dt
+			}
+			if abs(spring.velocity) < 0.01, abs(spring.value - spring.target) < 0.002 {
+				spring.apply(spring.target)
+				springs.removeValue(forKey: key)
+				if let completion = spring.completion {
+					finished.append(completion)
+				}
+			}
+			else {
+				spring.apply(spring.value)
+				springs[key] = spring
+			}
+		}
+
+		finished.forEach { $0() }
+		if springs.isEmpty {
+			timer?.invalidate()
+			timer = nil
+		}
 	}
 }
 
