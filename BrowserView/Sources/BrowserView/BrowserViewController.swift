@@ -53,11 +53,15 @@ public final class BrowserViewController: NSViewController {
 	private let timeProvider: () -> TimeInterval
 	@Dependency(\.browserRuntime) private var dependencyBrowserRuntime
 
-	private var browserRuntime: any BrowserRuntimeDriving {
+	var browserRuntime: any BrowserRuntimeDriving {
 		browserRuntimeOverride ?? dependencyBrowserRuntime
 	}
 
-	private lazy var chromeView = BrowserChromeView(
+	/// Per-site boosts, zap picker and action performer (see SiteCustomization/).
+	public private(set) lazy var siteCustomization = BrowserSiteCustomizationController(owner: self)
+
+	// Internal (not private) so feature extensions in other files can reach the chrome view.
+	lazy var chromeView = BrowserChromeView(
 		browserRuntime: browserRuntime,
 		sidebarViewModel: sidebarViewModel,
 		sidebarPresentation: sidebarPresentation,
@@ -191,10 +195,32 @@ public final class BrowserViewController: NSViewController {
 	override public func viewDidLoad() {
 		super.viewDidLoad()
 		buildChromeUI()
+		siteCustomization.attach()
 	}
 
 	public var hostedBrowser: CEFBridgeBrowserRef? {
 		chromeView.hostedBrowser
+	}
+
+	// Selected-page accessors for layered features (site customization actions).
+	var selectedTabID: BrowserTabID? {
+		sidebarViewModel.selectedTabID
+	}
+
+	var selectedTabCurrentURL: String? {
+		sidebarViewModel.selectedTabCurrentURL
+	}
+
+	var selectedTabTitle: String? {
+		sidebarViewModel.tabs.first { $0.id == sidebarViewModel.selectedTabID }?.displayTitle
+	}
+
+	func openNewTab(with address: String) {
+		sidebarViewModel.openNewTab(with: address)
+	}
+
+	func navigateSelectedTab(to address: String) {
+		sidebarViewModel.navigateSelectedTab(to: address)
 	}
 
 	public func updateSidebarWidth(_ width: CGFloat) {
@@ -439,6 +465,18 @@ final class BrowserChromeView: NSView {
 	var hostedBrowser: CEFBridgeBrowserRef? {
 		guard let selectedTabID = sidebarViewModel.selectedTabID else { return nil }
 		return browserContainersByTabID[selectedTabID]?.browserRef
+	}
+
+	/// Page lifecycle callbacks for features layered on top of the browser (site customization).
+	var pageLifecycleHooks = BrowserPageLifecycleHooks()
+
+	/// Every tab that currently has a live browser, with its last committed URL.
+	func liveBrowsers() -> [(tabID: BrowserTabID, browser: CEFBridgeBrowserRef, url: String)] {
+		browserContainersByTabID.compactMap { tabID, container in
+			guard let browser = container.browserRef else { return nil }
+			let url = tabViewModel(for: tabID)?.currentURL ?? container.pendingURL
+			return (tabID, browser, url)
+		}
 	}
 
 	#if DEBUG
@@ -1116,6 +1154,7 @@ final class BrowserChromeView: NSView {
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
+			self.bindLayeredPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
 			self.syncNavigationState(for: hostedTab.id)
 			self.browserRuntime.noteBrowserActivity()
@@ -1486,6 +1525,7 @@ final class BrowserChromeView: NSView {
 			self.sidebarViewModel.updateTabURL(url, for: tabID)
 			self.restoreScrollStateIfNeeded(for: tabID)
 			self.syncNavigationState(for: tabID)
+			self.pageLifecycleHooks.didCommit?(tabID, browser, url)
 		}
 	}
 
@@ -1927,6 +1967,9 @@ final class BrowserChromeView: NSView {
 	private func syncNavigationState(for tabID: BrowserTabID) {
 		let state = navigationState(for: tabID)
 		sidebarViewModel.updateNavigationState(state, for: tabID)
+		if let browser = browserContainersByTabID[tabID]?.browserRef {
+			pageLifecycleHooks.didSyncLoadingState?(tabID, browser, state.isLoading)
+		}
 		guard var record = tabLifecycleRecords[tabID] else { return }
 		if state.isLoading {
 			if record.navigationState == .none {
@@ -1956,6 +1999,20 @@ final class BrowserChromeView: NSView {
 
 	private func tabViewModel(for tabID: BrowserTabID) -> BrowserTabViewModel? {
 		sidebarViewModel.tabs.first(where: { $0.id == tabID })
+	}
+
+	// MARK: Page commands
+
+	/// Forwards every page command to layered features (site customization) via `pageLifecycleHooks`.
+	/// Uses the multi-handler API so it coexists with other experiments' handlers on the same browser.
+	private func bindLayeredPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.addPageCommandHandler(for: browser, name: nil) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			self.pageLifecycleHooks.didReceivePageCommand?(tabID, command)
+		}
 	}
 
 	private func captureScrollStateIfNeeded(for tabID: BrowserTabID) {

@@ -19,6 +19,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var toastHostView: NSHostingView<AnyView>?
 	private var floatingToolbarHostView: BrowserFloatingToolbarHostView?
 	private let floatingToolbarState = BrowserFloatingToolbarState()
+	var siteCustomizationKeyMonitor: Any?
 	private var floatingChromeMouseMonitor: Any?
 	private var areWindowButtonsRevealed = false
 	private var isDebugPinningWindowButtons = false
@@ -45,7 +46,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private let browserChromeViewModel: BrowserChromeViewModel
 	private let browserActionBarViewModel: BrowserActionBarViewModel
 
-	private lazy var browserViewController: BrowserViewController = .init(
+	lazy var browserViewController: BrowserViewController = .init(
 		windowID: windowID,
 		sidebarViewModel: sidebarViewModel,
 		sidebarPresentation: sidebarPresentation,
@@ -100,6 +101,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		}
 		actionBarPanel?.attach(to: view.window)
 		observeFloatingToolbarInputs()
+		configureSiteCustomization()
 	}
 
 	override func viewDidAppear() {
