@@ -5,6 +5,10 @@ struct DeveloperPanelView: View {
 	@Bindable var model: DeveloperOverlayModel
 	@Namespace private var tabNamespace
 
+	init(model: DeveloperOverlayModel) {
+		self.model = model
+	}
+
 	var body: some View {
 		VStack(spacing: 0) {
 			header
@@ -270,7 +274,7 @@ struct DeveloperConsoleRow: View {
 			}
 			.padding(.horizontal, 12)
 			.padding(.vertical, 5)
-			.background(background)
+			.background(rowBackground)
 			.contextMenu {
 				Button("Copy Message") {
 					NSPasteboard.general.clearContents()
@@ -312,7 +316,7 @@ struct DeveloperConsoleRow: View {
 	}
 
 	@ViewBuilder
-	private var background: some View {
+	private var rowBackground: some View {
 		switch entry.level {
 		case .error: Color.red.opacity(0.08)
 		case .warn: Color.orange.opacity(0.08)

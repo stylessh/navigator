@@ -70,8 +70,9 @@ public final class DeveloperViewportStageView: NSView {
 
 		for handle in [rightHandle, bottomHandle, cornerHandle] {
 			handle.isHidden = true
+			let edge = handle.edge
 			handle.onDrag = { [weak self] phase, location in
-				self?.handleDrag(phase: phase, edge: handle.edge, location: location)
+				self?.handleDrag(phase: phase, edge: edge, location: location)
 			}
 			addSubview(handle)
 		}

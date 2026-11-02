@@ -420,6 +420,13 @@ public struct DeveloperViewportPreset: Identifiable, Equatable, Hashable, Sendab
 		.desktop,
 	]
 
+	// CGSize isn't Hashable; identity plus size is enough.
+	public func hash(into hasher: inout Hasher) {
+		hasher.combine(id)
+		hasher.combine(size.width)
+		hasher.combine(size.height)
+	}
+
 	public static func custom(size: CGSize) -> DeveloperViewportPreset {
 		DeveloperViewportPreset(id: "custom", name: "Custom", family: .custom, size: size)
 	}

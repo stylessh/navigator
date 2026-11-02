@@ -133,6 +133,22 @@ struct DeveloperIconButton: View {
 
 	@State private var isHovering = false
 
+	init(
+		systemImage: String,
+		help: String,
+		isActive: Bool = false,
+		tint: Color = .accentColor,
+		size: CGFloat = 30,
+		action: @escaping () -> Void
+	) {
+		self.systemImage = systemImage
+		self.help = help
+		self.isActive = isActive
+		self.tint = tint
+		self.size = size
+		self.action = action
+	}
+
 	var body: some View {
 		Button(action: action) {
 			Image(systemName: systemImage)
