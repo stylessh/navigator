@@ -9,7 +9,7 @@ if [ -z "${REPO_DIR}" ]; then
 	exit 1
 fi
 
-if [ ! -d "${REPO_DIR}/.git" ]; then
+if [ ! -e "${REPO_DIR}/.git" ]; then
 	echo "verify-lfs-data: ${REPO_DIR} is not a git checkout"
 	exit 1
 fi

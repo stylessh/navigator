@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
 	name: "MiumKit",
 	platforms: [
-		.macOS(.v15),
+		.macOS(.v14),
 	],
 	products: [
 		.library(name: "MiumKit", targets: ["MiumKit"]),
