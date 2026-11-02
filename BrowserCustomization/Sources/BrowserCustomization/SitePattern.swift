@@ -58,7 +58,9 @@ public struct SitePattern: Hashable, Sendable, Codable, CustomStringConvertible,
 	public var specificity: Int {
 		let (host, path) = parts
 		if host == "*" { return 0 }
-		let hostScore = host.split(separator: ".").count * 10 - (host.hasPrefix("*.") ? 5 : 0)
+		// A leading "*." widens the match, so it scores below the same host written exactly.
+		let labels = host.split(separator: ".").filter { $0 != "*" }.count
+		let hostScore = labels * 10 - (host.hasPrefix("*.") ? 5 : 0)
 		return hostScore + (path.map { $0.count * 100 } ?? 0)
 	}
 

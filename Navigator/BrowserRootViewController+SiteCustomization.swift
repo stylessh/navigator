@@ -34,18 +34,26 @@ extension BrowserRootViewController {
 	private func installSiteCustomizationKeyMonitor() {
 		guard siteCustomizationKeyMonitor == nil else { return }
 		siteCustomizationKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-			MainActor.assumeIsolated {
-				self?.handleSiteCustomizationKey(event) == true ? nil : event
+			// Copy plain values out of the event so nothing non-Sendable crosses into the isolated closure.
+			let keyCode = event.keyCode
+			let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+			let windowNumber = event.windowNumber
+			let handled = MainActor.assumeIsolated {
+				self?.handleSiteCustomizationKey(keyCode: keyCode, modifiers: modifiers, windowNumber: windowNumber) == true
 			}
+			return handled ? nil : event
 		}
 	}
 
-	private func handleSiteCustomizationKey(_ event: NSEvent) -> Bool {
-		guard event.window === view.window else { return false }
-		let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+	private func handleSiteCustomizationKey(
+		keyCode: UInt16,
+		modifiers: NSEvent.ModifierFlags,
+		windowNumber: Int
+	) -> Bool {
+		guard windowNumber == view.window?.windowNumber else { return false }
 		guard modifiers == [.command, .option] else { return false }
 		let customization = browserViewController.siteCustomization
-		switch event.keyCode {
+		switch keyCode {
 		case Self.zapKeyCode:
 			customization.startZapPicker()
 		case Self.customizeKeyCode:
