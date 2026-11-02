@@ -46,7 +46,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 				),
 				lastPublishedFrame: nil,
 				lastErrorDescription: nil
-			)
+			),
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -168,7 +169,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: nil,
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let payload = BrowserCameraRoutingJavaScript.makeConfigurationPayload(from: snapshot)
@@ -203,7 +205,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: nil,
-			publisherStatus: .notRequired
+			publisherStatus: .notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let message = BrowserCameraRoutingJavaScript.makeConfigurationTransportMessage(from: snapshot)
@@ -233,7 +236,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: "No available video capture devices.",
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -273,7 +277,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: "Pipeline unavailable.",
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -300,7 +305,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: nil,
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -349,7 +355,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: nil,
-			publisherStatus: .notRequired
+			publisherStatus: .notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -388,7 +395,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			],
 			performanceMetrics: .empty,
 			lastErrorDescription: nil,
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -416,7 +424,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 			activeConsumersByID: [:],
 			performanceMetrics: .empty,
 			lastErrorDescription: "Camera session is degraded.",
-			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired
+			publisherStatus: BrowserCameraVirtualPublisherStatus.notRequired,
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
@@ -448,7 +457,8 @@ final class BrowserCameraRoutingJavaScriptTests: XCTestCase {
 				configuration: nil,
 				lastPublishedFrame: nil,
 				lastErrorDescription: "Publisher unavailable"
-			)
+			),
+			recentDiagnosticEvents: []
 		)
 
 		let script = BrowserCameraRoutingJavaScript.makeInstallScript(from: snapshot)
