@@ -212,8 +212,13 @@ public struct SpatialSplitLayout<ID: Hashable & Codable & Sendable>: Equatable, 
 			case .down: return frame.minY >= origin.maxY - 0.5 && Self.overlaps(frame.minX ... frame.maxX, origin.minX ... origin.maxX)
 			}
 		}
+		// Dictionary order is unstable, so break distance ties deterministically: top-most, then left-most.
 		return candidates.min { lhs, rhs in
-			Self.distance(origin, lhs.value) < Self.distance(origin, rhs.value)
+			let lhsDistance = Self.distance(origin, lhs.value)
+			let rhsDistance = Self.distance(origin, rhs.value)
+			if abs(lhsDistance - rhsDistance) > 0.5 { return lhsDistance < rhsDistance }
+			if abs(lhs.value.minY - rhs.value.minY) > 0.5 { return lhs.value.minY < rhs.value.minY }
+			return lhs.value.minX < rhs.value.minX
 		}?.key
 	}
 
