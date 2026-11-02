@@ -12,6 +12,7 @@ let package = Package(
 	],
 	dependencies: [
 		.package(path: "../BrowserCameraKit"),
+		.package(path: "../BrowserCustomization"),
 		.package(path: "../BrowserRuntime"),
 		.package(path: "../BrowserSidebar"),
 		.package(path: "../ModelKit"),
@@ -22,6 +23,8 @@ let package = Package(
 			name: "BrowserView",
 			dependencies: [
 				.product(name: "BrowserCameraKit", package: "BrowserCameraKit"),
+				.product(name: "BrowserCustomization", package: "BrowserCustomization"),
+				.product(name: "BrowserCustomizationUI", package: "BrowserCustomization"),
 				.product(name: "BrowserRuntime", package: "BrowserRuntime"),
 				.product(name: "BrowserSidebar", package: "BrowserSidebar"),
 				.product(name: "ModelKit", package: "ModelKit"),

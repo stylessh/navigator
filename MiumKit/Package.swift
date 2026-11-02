@@ -33,6 +33,9 @@ let package = Package(
 			linkerSettings: [
 				.linkedFramework("Foundation"),
 				.linkedFramework("AppKit"),
+				.linkedFramework("CoreImage"),
+				.linkedFramework("IOSurface"),
+				.linkedFramework("QuartzCore"),
 			]
 		),
 		.testTarget(

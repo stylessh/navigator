@@ -248,7 +248,8 @@ final class BrowserCameraMenuBarViewTests: XCTestCase {
 				),
 				lastPublishedFrame: nil,
 				lastErrorDescription: nil
-			)
+			),
+			recentDiagnosticEvents: []
 		)
 		let viewModel = BrowserCameraMenuBarViewModel(
 			browserCameraSessionCoordinator: coordinator

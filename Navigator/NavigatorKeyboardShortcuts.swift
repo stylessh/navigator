@@ -16,6 +16,8 @@ enum NavigatorKeyboardShortcutAction: Equatable {
 	case selectNextTab
 	case selectPreviousTab
 	case selectTab(index: Int)
+	case showLinkHints(openInNewTab: Bool)
+	case openCommandBar
 }
 
 enum NavigatorKeyboardShortcutResolver {
@@ -26,6 +28,9 @@ enum NavigatorKeyboardShortcutResolver {
 		rawCharacter: String?
 	) -> NavigatorKeyboardShortcutAction? {
 		let supportedModifiers = modifiers.intersection(.deviceIndependentFlagsMask)
+		if let linkHintsAction = linkHintsAction(for: keyCode, modifiers: supportedModifiers) {
+			return linkHintsAction
+		}
 		guard hasSupportedCommandModifiers(supportedModifiers) else { return nil }
 
 		let usesShift = supportedModifiers.contains(.shift)
@@ -35,6 +40,8 @@ enum NavigatorKeyboardShortcutResolver {
 			return .openNewWindow
 		case (commandLShortcut, false):
 			return .openLocation
+		case (commandKShortcut, false):
+			return .openCommandBar
 		case (commandTShortcut, false):
 			return .openNewTab
 		case (commandTShortcut, true):
@@ -87,6 +94,8 @@ enum NavigatorKeyboardShortcutResolver {
 			return .openNewWindow
 		case "l":
 			return .openLocation
+		case "k":
+			return .openCommandBar
 		case "t":
 			return .openNewTab
 		case "p":
@@ -104,12 +113,29 @@ enum NavigatorKeyboardShortcutResolver {
 		}
 	}
 
+	/// ⌥⌘F shows keyboard link hints, ⌥⇧⌘F opens the chosen link in a new tab. Matched by
+	/// key code because Option changes the produced character.
+	private static func linkHintsAction(
+		for keyCode: UInt16,
+		modifiers: NSEvent.ModifierFlags
+	) -> NavigatorKeyboardShortcutAction? {
+		guard keyCode == commandOptionFShortcut,
+		      modifiers.contains([.command, .option]),
+		      modifiers.contains(.control) == false
+		else {
+			return nil
+		}
+		return .showLinkHints(openInNewTab: modifiers.contains(.shift))
+	}
+
 	private static func hasSupportedCommandModifiers(_ modifiers: NSEvent.ModifierFlags) -> Bool {
 		modifiers.contains(.command) && modifiers.intersection([.control, .option]).isEmpty
 	}
 
+	private static let commandOptionFShortcut: UInt16 = .init(kVK_ANSI_F)
 	private static let commandNShortcut: UInt16 = .init(kVK_ANSI_N)
 	private static let commandLShortcut: UInt16 = .init(kVK_ANSI_L)
+	private static let commandKShortcut: UInt16 = .init(kVK_ANSI_K)
 	private static let commandTShortcut: UInt16 = .init(kVK_ANSI_T)
 	private static let commandPShortcut: UInt16 = .init(kVK_ANSI_P)
 	private static let commandCShortcut: UInt16 = .init(kVK_ANSI_C)
@@ -163,6 +189,8 @@ struct NavigatorKeyboardShortcutHandler {
 	var selectNextTab: () -> Void
 	var selectPreviousTab: () -> Void
 	var selectTabAtIndex: (Int) -> Void
+	var showLinkHints: (Bool) -> Void = { _ in }
+	var openCommandBar: () -> Void = {}
 
 	func perform(_ action: NavigatorKeyboardShortcutAction) {
 		switch action {
@@ -192,6 +220,10 @@ struct NavigatorKeyboardShortcutHandler {
 			selectPreviousTab()
 		case let .selectTab(index):
 			selectTabAtIndex(index)
+		case let .showLinkHints(openInNewTab):
+			showLinkHints(openInNewTab)
+		case .openCommandBar:
+			openCommandBar()
 		}
 	}
 }

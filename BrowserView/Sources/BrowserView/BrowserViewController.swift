@@ -53,11 +53,15 @@ public final class BrowserViewController: NSViewController {
 	private let timeProvider: () -> TimeInterval
 	@Dependency(\.browserRuntime) private var dependencyBrowserRuntime
 
-	private var browserRuntime: any BrowserRuntimeDriving {
+	var browserRuntime: any BrowserRuntimeDriving {
 		browserRuntimeOverride ?? dependencyBrowserRuntime
 	}
 
-	private lazy var chromeView = BrowserChromeView(
+	/// Per-site boosts, zap picker and action performer (see SiteCustomization/).
+	public private(set) lazy var siteCustomization = BrowserSiteCustomizationController(owner: self)
+
+	// Internal (not private) so feature extensions in other files can reach the chrome view.
+	lazy var chromeView = BrowserChromeView(
 		browserRuntime: browserRuntime,
 		sidebarViewModel: sidebarViewModel,
 		sidebarPresentation: sidebarPresentation,
@@ -191,10 +195,44 @@ public final class BrowserViewController: NSViewController {
 	override public func viewDidLoad() {
 		super.viewDidLoad()
 		buildChromeUI()
+		siteCustomization.attach()
 	}
 
 	public var hostedBrowser: CEFBridgeBrowserRef? {
 		chromeView.hostedBrowser
+	}
+
+	/// Tint for the selected page; chrome around the browser observes this.
+	public let siteTintStore = BrowserSiteTintStore()
+
+	/// Shows keyboard link hints over the selected tab (no-op when the experiment is off).
+	public func beginLinkHints(openInNewTab: Bool = false) {
+		chromeView.beginLinkHints(openInNewTab: openInNewTab)
+	}
+
+	public var isShowingLinkHints: Bool {
+		chromeView.isShowingLinkHints
+	}
+
+	// Selected-page accessors for layered features (site customization actions).
+	var selectedTabID: BrowserTabID? {
+		sidebarViewModel.selectedTabID
+	}
+
+	var selectedTabCurrentURL: String? {
+		sidebarViewModel.selectedTabCurrentURL
+	}
+
+	var selectedTabTitle: String? {
+		sidebarViewModel.tabs.first { $0.id == sidebarViewModel.selectedTabID }?.displayTitle
+	}
+
+	func openNewTab(with address: String) {
+		sidebarViewModel.openNewTab(with: address)
+	}
+
+	func navigateSelectedTab(to address: String) {
+		sidebarViewModel.navigateSelectedTab(to: address)
 	}
 
 	public func updateSidebarWidth(_ width: CGFloat) {
@@ -219,6 +257,7 @@ public final class BrowserViewController: NSViewController {
 	}
 
 	private func buildChromeUI() {
+		chromeView.siteTintStore = siteTintStore
 		view.addSubview(chromeView)
 		chromeView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -273,7 +312,27 @@ final class BrowserChromeView: NSView {
 	private let timeProvider: () -> TimeInterval
 	private let browserCameraSessionCoordinator: any BrowserCameraSessionCoordinating
 	private let restoredHistoryCoordinator = BrowserRestoredHistoryCoordinator()
-	private let browserContainerHost = NSView()
+	private lazy var siteTintSampling = BrowserSiteTintSamplingCoordinator(
+		evaluate: { [weak self] tabID, script in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return }
+			// Fire-and-forget in the main frame; the script answers through the page-command channel
+			// (browser-process prompt interception), which doesn't depend on the renderer helper.
+			self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+		},
+		canSample: { [weak self] tabID in
+			guard let self, let browser = self.browserContainersByTabID[tabID]?.browserRef else { return false }
+			return self.browserRuntime.isLoading(browser) == false
+		}
+	)
+
+	var siteTintStore: BrowserSiteTintStore? {
+		get { siteTintSampling.store }
+		set { siteTintSampling.store = newValue }
+	}
+	private lazy var spatialLayout = BrowserSpatialLayoutController(hooks: makeSpatialLayoutHooks())
+	private var browserContainerHost: BrowserSpatialHostView {
+		spatialLayout.hostView
+	}
 	private let tabHostViewModel = BrowserTabHostViewModel()
 	private var tabConfigurationChangeObserverID: UUID?
 	private var browserContainersByTabID = [BrowserTabID: BrowserContainerView]()
@@ -298,9 +357,34 @@ final class BrowserChromeView: NSView {
 	private var activeManagedCameraFrameTabIDs = Set<BrowserTabID>()
 	private var browserProcessCameraScriptFallbackTabIDs = Set<BrowserTabID>()
 	private var rendererCameraRoutingTransportReadyTabIDs = Set<BrowserTabID>()
+	private lazy var linkPeekController = BrowserLinkPeekController(
+		dependencies: .init(
+			browserRuntime: browserRuntime,
+			selectedBrowser: { [weak self] in
+				self?.hostedBrowser
+			},
+			openInNewTab: { [weak self] url in
+				self?.sidebarViewModel.openNewTab(with: url, activate: true)
+			},
+			isEnabled: {
+				NavigatorExperiments.shared.isEnabled(.linkPeek)
+			}
+		)
+	)
 	private var rendererManagedFrameTransportReadyTabIDs = Set<BrowserTabID>()
 	private var nextManagedCameraFrameSequence: UInt64 = 1
 	private var lastManagedCameraFrameDeliveryTime: TimeInterval?
+	private lazy var linkHintsController = BrowserLinkHintsController(
+		environment: .init(
+			evaluateJavaScript: { [weak self] browser, script in
+				self?.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+			},
+			openURLInNewTab: { [weak self] url in
+				self?.sidebarViewModel.openNewTab(with: url, activate: false)
+			}
+		)
+	)
+	private var linkHintsExperimentObserver: BrowserLinkHintsExperimentObserver?
 
 	convenience init(
 		browserRuntime: any BrowserRuntimeDriving,
@@ -429,6 +513,9 @@ final class BrowserChromeView: NSView {
 		bindBrowserCameraSessionUpdates()
 		addChromeSubviews()
 		syncBrowserTabs()
+		linkHintsExperimentObserver = BrowserLinkHintsExperimentObserver { [weak self] _ in
+			self?.reinstallKeyboardNavigationScriptInAllBrowsers()
+		}
 	}
 
 	@available(*, unavailable)
@@ -439,6 +526,18 @@ final class BrowserChromeView: NSView {
 	var hostedBrowser: CEFBridgeBrowserRef? {
 		guard let selectedTabID = sidebarViewModel.selectedTabID else { return nil }
 		return browserContainersByTabID[selectedTabID]?.browserRef
+	}
+
+	/// Page lifecycle callbacks for features layered on top of the browser (site customization).
+	var pageLifecycleHooks = BrowserPageLifecycleHooks()
+
+	/// Every tab that currently has a live browser, with its last committed URL.
+	func liveBrowsers() -> [(tabID: BrowserTabID, browser: CEFBridgeBrowserRef, url: String)] {
+		browserContainersByTabID.compactMap { tabID, container in
+			guard let browser = container.browserRef else { return nil }
+			let url = tabViewModel(for: tabID)?.currentURL ?? container.pendingURL
+			return (tabID, browser, url)
+		}
 	}
 
 	#if DEBUG
@@ -468,6 +567,10 @@ final class BrowserChromeView: NSView {
 		super.viewDidMoveToWindow()
 		window?.acceptsMouseMovedEvents = true
 		setupMouseMoveMonitor()
+		if window != nil {
+			linkPeekController.attach(hostView: browserContainerHost, overlayParent: self)
+			spatialLayout.attach(overlayParent: self)
+		}
 		if tabLifecycleConfiguration.isEnabled {
 			setupInteractionMonitor()
 			setupWindowLifecycleObservers()
@@ -479,6 +582,7 @@ final class BrowserChromeView: NSView {
 		super.viewWillMove(toWindow: newWindow)
 		if newWindow == nil {
 			cleanupMonitors()
+			spatialLayout.detach()
 		}
 		else if newWindow !== window {
 			teardownWindowLifecycleObservers()
@@ -534,6 +638,7 @@ final class BrowserChromeView: NSView {
 
 	private func cleanupMonitors() {
 		lifecycleGeneration += 1
+		siteTintSampling.cancelAll()
 		cancelAllActivations()
 		cancelVisibilityHandoff(hideRetainedTab: true)
 		teardownWindowLifecycleObservers()
@@ -541,6 +646,7 @@ final class BrowserChromeView: NSView {
 		teardownMouseMoveMonitor()
 		teardownInteractionMonitor()
 		browserChromeViewModel.cancelPendingSidebarOpen()
+		linkPeekController.detach()
 	}
 
 	private func setupMouseMoveMonitor() {
@@ -710,6 +816,7 @@ final class BrowserChromeView: NSView {
 			currentSelectedTabID = nil
 			previousSelectedTabID = nil
 		}
+		spatialLayout.tabsDidChange()
 	}
 
 	private func bindBrowserCameraSessionUpdates() {
@@ -1115,8 +1222,12 @@ final class BrowserChromeView: NSView {
 			self.bindMainFrameNavigationHandler(for: browser, tabID: hostedTab.id)
 			self.bindOpenURLInTabHandler(for: browser, tabID: hostedTab.id)
 			self.bindCameraRoutingEventHandler(for: browser, tabID: hostedTab.id)
+			self.bindSiteTintPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.bindPermissionPromptHandler(for: browser, tabID: hostedTab.id)
+			self.bindLinkHintsPageCommands(for: browser, tabID: hostedTab.id)
+			self.bindLayeredPageCommandHandler(for: browser, tabID: hostedTab.id)
 			self.installBrowserCameraRoutingScript(for: browser, tabID: hostedTab.id)
+			self.installKeyboardNavigationScript(for: browser)
 			self.syncNavigationState(for: hostedTab.id)
 			self.browserRuntime.noteBrowserActivity()
 		}
@@ -1132,18 +1243,13 @@ final class BrowserChromeView: NSView {
 			self.syncNavigationState(for: hostedTab.id)
 		}
 		browserContainersByTabID[hostedTab.id] = container
-		browserContainerHost.addSubview(container)
-		container.translatesAutoresizingMaskIntoConstraints = false
-		NSLayoutConstraint.activate([
-			container.topAnchor.constraint(equalTo: browserContainerHost.topAnchor),
-			container.leadingAnchor.constraint(equalTo: browserContainerHost.leadingAnchor),
-			container.trailingAnchor.constraint(equalTo: browserContainerHost.trailingAnchor),
-			container.bottomAnchor.constraint(equalTo: browserContainerHost.bottomAnchor),
-		])
+		// Containers are frame-positioned by the spatial host so split panes can spring between layouts.
+		spatialLayout.registerContainer(container, for: hostedTab.id)
 	}
 
 	private func removeBrowserContainer(for tabID: BrowserTabID) {
 		restoredHistoryCoordinator.browserRemoved(for: tabID)
+		siteTintSampling.tabRemoved(tabID)
 		cancelActivation(for: tabID)
 		if retainedVisibleTabID == tabID {
 			cancelVisibilityHandoff(hideRetainedTab: false)
@@ -1156,15 +1262,21 @@ final class BrowserChromeView: NSView {
 			previousSelectedTabID = nil
 		}
 		guard let container = browserContainersByTabID.removeValue(forKey: tabID) else { return }
+		linkHintsController.cancelIfShowing(browser: container.browserRef)
 		browserProcessCameraScriptFallbackTabIDs.remove(tabID)
 		rendererCameraRoutingTransportReadyTabIDs.remove(tabID)
 		rendererManagedFrameTransportReadyTabIDs.remove(tabID)
 		clearCameraConsumer(for: tabID)
+		spatialLayout.unregisterContainer(for: tabID)
 		container.removeFromSuperview()
 	}
 
 	private func applySelectedTab(_ tabID: BrowserTabID) {
 		let selectionChanged = currentSelectedTabID != tabID
+		if selectionChanged {
+			// Grab a thumbnail for the tab overview while the outgoing page is still on screen.
+			spatialLayout.selectionWillChange(from: currentSelectedTabID)
+		}
 		if tabLifecycleConfiguration.isEnabled {
 			handleSelectionChange(to: tabID)
 		}
@@ -1172,6 +1284,7 @@ final class BrowserChromeView: NSView {
 			activateCommittedTab(tabID)
 		}
 		updateContainerVisibility(for: tabID, selectionChanged: selectionChanged)
+		linkHintsController.cancelIfNotShowing(browser: browserContainersByTabID[tabID]?.browserRef)
 
 		guard let selectedContainer = browserContainersByTabID[tabID] else { return }
 		if tabLifecycleRecords[tabID]?.isCommitted == true {
@@ -1189,21 +1302,29 @@ final class BrowserChromeView: NSView {
 		if let browser = selectedContainer.browserRef {
 			installBrowserCameraRoutingScript(for: browser, tabID: tabID)
 		}
+		siteTintSampling.tabSelected(tabID)
 		syncNavigationState(for: tabID)
+		spatialLayout.selectionDidChange()
 	}
 
 	private func updateContainerVisibility(for selectedTabID: BrowserTabID, selectionChanged: Bool) {
 		cancelVisibilityHandoff(hideRetainedTab: true)
 
-		let retainedTabID = retainedVisibilityHandoffTabID(for: selectedTabID, selectionChanged: selectionChanged)
-		let visibleTabIDs = Set([selectedTabID, retainedTabID].compactMap { $0 })
+		let splitPaneIDs = spatialLayout.visiblePaneIDs(selected: selectedTabID)
+		let retainedTabID = splitPaneIDs.isEmpty
+			? retainedVisibilityHandoffTabID(for: selectedTabID, selectionChanged: selectionChanged)
+			: nil
+		let visibleTabIDs = Set([selectedTabID, retainedTabID].compactMap { $0 }).union(splitPaneIDs)
 
 		for (candidateTabID, container) in browserContainersByTabID {
 			container.isHidden = visibleTabIDs.contains(candidateTabID) == false
 			container.layer?.zPosition = candidateTabID == retainedTabID ? 1 : 0
+			let isSplitPane = candidateTabID != selectedTabID && splitPaneIDs.contains(candidateTabID)
 			container.setBrowserCreationEnabled(
-				candidateTabID == selectedTabID &&
-					(tabLifecycleConfiguration.isEnabled == false || tabLifecycleRecords[candidateTabID]?.isCommitted == true)
+				isSplitPane || (
+					candidateTabID == selectedTabID &&
+						(tabLifecycleConfiguration.isEnabled == false || tabLifecycleRecords[candidateTabID]?.isCommitted == true)
+				)
 			)
 		}
 
@@ -1484,8 +1605,11 @@ final class BrowserChromeView: NSView {
 				)
 			}
 			self.sidebarViewModel.updateTabURL(url, for: tabID)
+			self.siteTintSampling.navigationCommitted(url, for: tabID)
+			self.installKeyboardNavigationScript(for: browser)
 			self.restoreScrollStateIfNeeded(for: tabID)
 			self.syncNavigationState(for: tabID)
+			self.pageLifecycleHooks.didCommit?(tabID, browser, url)
 		}
 	}
 
@@ -1501,12 +1625,29 @@ final class BrowserChromeView: NSView {
 		}
 	}
 
+	/// Handlers on the page-command channel are dropped by the runtime when the browser closes.
+	private func bindSiteTintPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.addPageCommandHandler(
+			for: browser,
+			name: BrowserSiteTintSampler.commandName
+		) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			guard let payload = command.arguments[BrowserSiteTintSampler.payloadArgument] else { return }
+			self.siteTintSampling.handlePageMessage(payload, for: tabID)
+		}
+	}
+
 	private func bindTitleChangeHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
 		let lifecycleGeneration = self.lifecycleGeneration
 		browserRuntime.setTitleChangeHandler(for: browser) { [weak self] title in
 			guard let self else { return }
 			guard self.lifecycleGeneration == lifecycleGeneration else { return }
 			self.sidebarViewModel.updateTabTitle(title, for: tabID)
+			self.siteTintSampling.titleChanged(for: tabID)
+			self.installKeyboardNavigationScript(for: browser)
 			if let tab = self.tabViewModel(for: tabID),
 			   let historyUpdate = self.restoredHistoryCoordinator.handleTitleChange(title, for: tab) {
 				self.sidebarViewModel.updateTabSessionHistory(
@@ -1927,6 +2068,9 @@ final class BrowserChromeView: NSView {
 	private func syncNavigationState(for tabID: BrowserTabID) {
 		let state = navigationState(for: tabID)
 		sidebarViewModel.updateNavigationState(state, for: tabID)
+		if let browser = browserContainersByTabID[tabID]?.browserRef {
+			pageLifecycleHooks.didSyncLoadingState?(tabID, browser, state.isLoading)
+		}
 		guard var record = tabLifecycleRecords[tabID] else { return }
 		if state.isLoading {
 			if record.navigationState == .none {
@@ -1956,6 +2100,86 @@ final class BrowserChromeView: NSView {
 
 	private func tabViewModel(for tabID: BrowserTabID) -> BrowserTabViewModel? {
 		sidebarViewModel.tabs.first(where: { $0.id == tabID })
+	}
+
+	// MARK: Keyboard link hints
+
+	/// Shows link hints for the selected tab. Pressing it again while hints are up cancels.
+	func beginLinkHints(openInNewTab: Bool) {
+		guard let selectedTabID = sidebarViewModel.selectedTabID,
+		      let container = browserContainersByTabID[selectedTabID],
+		      let browser = container.browserRef
+		else {
+			return
+		}
+		linkHintsController.begin(browser: browser, hostView: container, openInNewTab: openInNewTab)
+	}
+
+	var isShowingLinkHints: Bool {
+		linkHintsController.isActive
+	}
+
+	private func bindLinkHintsPageCommands(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		let names = [
+			BrowserKeyboardNavigationJavaScript.showLinkHintsCommand,
+			BrowserKeyboardNavigationJavaScript.targetsCommand,
+			BrowserKeyboardNavigationJavaScript.openURLCommand,
+		]
+		for name in names {
+			browserRuntime.addPageCommandHandler(for: browser, name: name) { [weak self] command in
+				guard let self else { return }
+				guard self.lifecycleGeneration == lifecycleGeneration else { return }
+				guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+				self.handleLinkHintsPageCommand(command, tabID: tabID, browser: browser)
+			}
+		}
+	}
+
+	private func handleLinkHintsPageCommand(
+		_ command: BrowserRuntimePageCommand,
+		tabID: BrowserTabID,
+		browser: CEFBridgeBrowserRef
+	) {
+		if linkHintsController.handlePageCommand(command, from: browser) {
+			return
+		}
+		guard command.name == BrowserKeyboardNavigationJavaScript.showLinkHintsCommand else { return }
+		// Only the visible tab can show hints; a background tab's key events are stale.
+		guard sidebarViewModel.selectedTabID == tabID else { return }
+		let openInNewTab = command.arguments[BrowserKeyboardNavigationJavaScript.openInNewTabArgument] == "true"
+		beginLinkHints(openInNewTab: openInNewTab)
+	}
+
+	private func installKeyboardNavigationScript(for browser: CEFBridgeBrowserRef) {
+		let script = BrowserKeyboardNavigationJavaScript.makeInstallScript(
+			enabled: BrowserLinkHintsController.isExperimentEnabled
+		)
+		browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
+	}
+
+	private func reinstallKeyboardNavigationScriptInAllBrowsers() {
+		if BrowserLinkHintsController.isExperimentEnabled == false {
+			linkHintsController.cancel()
+		}
+		for container in browserContainersByTabID.values {
+			guard let browser = container.browserRef else { continue }
+			installKeyboardNavigationScript(for: browser)
+		}
+	}
+
+	// MARK: Page commands
+
+	/// Forwards every page command to layered features (site customization) via `pageLifecycleHooks`.
+	/// Uses the multi-handler API so it coexists with other experiments' handlers on the same browser.
+	private func bindLayeredPageCommandHandler(for browser: CEFBridgeBrowserRef, tabID: BrowserTabID) {
+		let lifecycleGeneration = self.lifecycleGeneration
+		browserRuntime.addPageCommandHandler(for: browser, name: nil) { [weak self] command in
+			guard let self else { return }
+			guard self.lifecycleGeneration == lifecycleGeneration else { return }
+			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
+			self.pageLifecycleHooks.didReceivePageCommand?(tabID, command)
+		}
 	}
 
 	private func captureScrollStateIfNeeded(for tabID: BrowserTabID) {
@@ -2056,6 +2280,67 @@ final class BrowserChromeView: NSView {
 
 	override func hitTest(_ point: NSPoint) -> NSView? {
 		return super.hitTest(point)
+	}
+
+	// MARK: Spatial layouts (experimental)
+
+	private func makeSpatialLayoutHooks() -> BrowserSpatialLayoutHooks {
+		BrowserSpatialLayoutHooks(
+			tabs: { [weak self] in
+				self?.sidebarViewModel.tabs ?? []
+			},
+			selectedTabID: { [weak self] in
+				self?.sidebarViewModel.selectedTabID
+			},
+			container: { [weak self] tabID in
+				self?.browserContainersByTabID[tabID]
+			},
+			selectTab: { [weak self] tabID in
+				self?.sidebarViewModel.selectTab(id: tabID)
+			},
+			closeTab: { [weak self] tabID in
+				self?.sidebarViewModel.closeTab(id: tabID)
+			},
+			moveTab: { [weak self] tabID, targetID in
+				guard let self else { return }
+				let tabs = self.sidebarViewModel.tabs
+				guard let source = tabs.firstIndex(where: { $0.id == tabID }),
+				      let destination = tabs.firstIndex(where: { $0.id == targetID })
+				else { return }
+				self.sidebarViewModel.moveTabs(from: IndexSet(integer: source), to: destination)
+			},
+			setPaneLive: { [weak self] tabID, isLive in
+				self?.setSplitPaneLive(tabID, isLive: isLive)
+			},
+			refreshVisibility: { [weak self] in
+				guard let self, let selectedTabID = self.sidebarViewModel.selectedTabID else { return }
+				self.updateContainerVisibility(for: selectedTabID, selectionChanged: false)
+			}
+		)
+	}
+
+	/// Keeps a non-focused split pane's browser alive and on screen.
+	private func setSplitPaneLive(_ tabID: BrowserTabID, isLive: Bool) {
+		guard let container = browserContainersByTabID[tabID] else { return }
+		if isLive {
+			if var record = tabLifecycleRecords[tabID] {
+				record.intentState = .committed
+				record.lastSelectionGeneration = selectionGeneration
+				tabLifecycleRecords[tabID] = record
+			}
+			setProtection(true, reason: .splitPane, for: tabID)
+			container.isHidden = false
+			layoutSubtreeIfNeeded()
+			beginProvisionalNavigationIfNeeded(for: tabID)
+			container.setBrowserCreationEnabled(true)
+			container.createBrowserIfNeeded()
+			if let browser = container.browserRef {
+				installBrowserCameraRoutingScript(for: browser, tabID: tabID)
+			}
+		}
+		else {
+			setProtection(false, reason: .splitPane, for: tabID)
+		}
 	}
 }
 

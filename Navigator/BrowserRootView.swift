@@ -14,11 +14,13 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var sidebarPanel: BrowserSidebarPanel?
 	private var sidebarPanelLeadingConstraint: NSLayoutConstraint?
 	private var sidebarPanelWidthConstraint: NSLayoutConstraint?
-	private var actionBarPanel: BrowserActionBarView?
+	private var actionBarPanel: (any NavigatorActionBarPanel)?
 	private var sidebarHideWorkItem: DispatchWorkItem?
 	private var toastHostView: NSHostingView<AnyView>?
 	private var floatingToolbarHostView: BrowserFloatingToolbarHostView?
 	private let floatingToolbarState = BrowserFloatingToolbarState()
+	private let developerOverlay = NavigatorDeveloperOverlay()
+	var siteCustomizationKeyMonitor: Any?
 	private var floatingChromeMouseMonitor: Any?
 	private var areWindowButtonsRevealed = false
 	private var isDebugPinningWindowButtons = false
@@ -26,6 +28,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private var didApplyDebugURLs = false
 	private static let floatingToolbarRevealDistance: CGFloat = 96
 	private static let windowButtonsRevealSize = CGSize(width: 120, height: 44)
+	private var windowSiteTint: BrowserWindowSiteTint?
 	private static let sidebarOuterPadding: CGFloat = 10
 	private static let sidebarVisibleInset: CGFloat = 5
 	private static let toastTitleFontSize: CGFloat = 14
@@ -45,7 +48,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	private let browserChromeViewModel: BrowserChromeViewModel
 	private let browserActionBarViewModel: BrowserActionBarViewModel
 
-	private lazy var browserViewController: BrowserViewController = .init(
+	lazy var browserViewController: BrowserViewController = .init(
 		windowID: windowID,
 		sidebarViewModel: sidebarViewModel,
 		sidebarPresentation: sidebarPresentation,
@@ -86,6 +89,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		applyResolvedColors()
 		browserActionBarViewModel.dismiss()
 		buildComposition()
+		developerOverlay.installOverlay(in: view)
 		buildFloatingToolbar()
 		buildToastHost()
 	}
@@ -94,12 +98,11 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		super.viewDidLoad()
 		configureSidebarPresentationTracking()
 		observeToastState()
-		actionBarPanel = BrowserActionBarView(viewModel: browserActionBarViewModel)
-		actionBarPanel?.updateAnchorWindow = { [weak self] in
-			self?.view.window
-		}
-		actionBarPanel?.attach(to: view.window)
+		installActionBarPanel()
+		observeCommandBarExperiment()
 		observeFloatingToolbarInputs()
+		syncDeveloperOverlayToolbarAccessories()
+		configureSiteCustomization()
 	}
 
 	override func viewDidAppear() {
@@ -123,8 +126,12 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	}
 
 	private func buildComposition() {
+		windowSiteTint = BrowserWindowSiteTint(view: view, store: browserViewController.siteTintStore)
 		addChild(browserViewController)
-		let browserView = browserViewController.view
+		// The developer overlay's viewport stage wraps the browser view (fills it unless a preset is on).
+		let browserView = developerOverlay.makeStage(for: browserViewController) { [sidebarViewModel] in
+			sidebarViewModel.isLoading
+		}
 		browserView.translatesAutoresizingMaskIntoConstraints = false
 		view.addSubview(browserView)
 
@@ -139,6 +146,49 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 			browserView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
 			browserView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
 		])
+	}
+
+	/// The classic one-line location bar, or the command bar when its experiment is on.
+	/// Both drive the same `BrowserActionBarViewModel`.
+	private func installActionBarPanel() {
+		let useCommandBar = NavigatorExperiments.shared.isEnabled(.commandBar)
+		browserActionBarViewModel.dismiss()
+		actionBarPanel?.removeFromWindow()
+		browserActionBarViewModel.isCommandBarEnabled = useCommandBar
+
+		if useCommandBar {
+			let panel = CommandBarPanel(viewModel: browserActionBarViewModel)
+			panel.updateAnchorWindow = { [weak self] in
+				self?.view.window
+			}
+			panel.presentationAnchor = { [weak self] in
+				self?.addressPillScreenRect()
+			}
+			actionBarPanel = panel
+		}
+		else {
+			let panel = BrowserActionBarView(viewModel: browserActionBarViewModel)
+			panel.updateAnchorWindow = { [weak self] in
+				self?.view.window
+			}
+			actionBarPanel = panel
+		}
+		actionBarPanel?.attach(to: view.window)
+	}
+
+	private func observeCommandBarExperiment() {
+		let wasEnabled = NavigatorExperiments.shared.isEnabled(.commandBar)
+		withObservationTracking {
+			_ = NavigatorExperiments.shared.isEnabled(.commandBar)
+		} onChange: { [weak self] in
+			Task { @MainActor [weak self] in
+				guard let self else { return }
+				if NavigatorExperiments.shared.isEnabled(.commandBar) != wasEnabled {
+					self.installActionBarPanel()
+				}
+				self.observeCommandBarExperiment()
+			}
+		}
 	}
 
 	private func buildFloatingToolbar() {
@@ -178,7 +228,8 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 				openNewTab: { appViewModel.presentNewTabActionBar() },
 				selectTab: { tabID in sidebarViewModel.selectTab(id: tabID) },
 				closeTab: { tabID in sidebarViewModel.closeTab(id: tabID) }
-			)
+			),
+			siteTintStore: browserViewController.siteTintStore
 		)
 	}
 
@@ -192,6 +243,20 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 	/// Extra toolbar buttons supplied by other modules (rendered after the tab cluster).
 	func setFloatingToolbarAccessories(_ accessories: [BrowserFloatingToolbarAccessory]) {
 		floatingToolbarState.trailingAccessories = accessories
+	}
+
+	/// Keeps the developer overlay's toolbar button in sync with its Experiments toggle, leaving
+	/// other modules' accessories alone.
+	private func syncDeveloperOverlayToolbarAccessories() {
+		let accessories = withObservationTracking {
+			developerOverlay.toolbarAccessories()
+		} onChange: { [weak self] in
+			Task { @MainActor [weak self] in
+				self?.syncDeveloperOverlayToolbarAccessories()
+			}
+		}
+		floatingToolbarState.trailingAccessories.removeAll { $0.id == "developerOverlay" }
+		floatingToolbarState.trailingAccessories.append(contentsOf: accessories)
 	}
 
 	private func observeFloatingToolbarInputs() {
@@ -572,6 +637,7 @@ final class BrowserRootViewController: NSViewController, NavigatorBrowserWindowC
 		let appearance = view.effectiveAppearance
 		let resolvedBackgroundColor = WindowChromeStyler.resolvedBackgroundColor(for: appearance)
 		view.layer?.backgroundColor = resolvedBackgroundColor.cgColor
+		windowSiteTint?.appearanceChanged()
 		if let window = view.window {
 			WindowChromeStyler.applyResolvedColors(to: window)
 		}
@@ -602,3 +668,14 @@ private final class BrowserRootContainerView: NSView {
 		return super.hitTest(point)
 	}
 }
+
+/// Common surface of the two action bar presentations.
+@MainActor
+protocol NavigatorActionBarPanel: AnyObject {
+	func attach(to window: NSWindow?)
+	func removeFromWindow()
+	func repositionForCurrentWindow(window: NSWindow?)
+}
+
+extension BrowserActionBarView: NavigatorActionBarPanel {}
+extension CommandBarPanel: NavigatorActionBarPanel {}

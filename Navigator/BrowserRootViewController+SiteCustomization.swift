@@ -1,0 +1,78 @@
+import AppKit
+import BrowserView
+import Foundation
+
+/// Wires per-site customization (BrowserView/SiteCustomization) into the window chrome:
+/// toasts, toolbar accessories from the action registry, and ⌥⌘Z / ⌥⌘B / ⌥⇧⌘C.
+/// (Copy Clean Link uses ⌥⇧⌘C because the developer overlay owns ⌥⌘C for inspect.)
+extension BrowserRootViewController {
+	private static let zapKeyCode: UInt16 = 6 // Z
+	private static let customizeKeyCode: UInt16 = 11 // B
+	private static let copyCleanLinkKeyCode: UInt16 = 8 // C
+	private static let escapeKeyCode: UInt16 = 53
+
+	func configureSiteCustomization() {
+		let customization = browserViewController.siteCustomization
+		let appViewModel = navigatorAppViewModel
+		customization.toastHandler = { message, _ in
+			appViewModel.presentToast(title: LocalizedStringResource(String.LocalizationValue(message)))
+		}
+		customization.onActionsChange = { [weak self] in
+			self?.refreshSiteCustomizationAccessories()
+		}
+		refreshSiteCustomizationAccessories()
+		installSiteCustomizationKeyMonitor()
+	}
+
+	func refreshSiteCustomizationAccessories() {
+		let customization = browserViewController.siteCustomization
+		setFloatingToolbarAccessories(customization.toolbarItems().map { item in
+			BrowserFloatingToolbarAccessory(id: item.id, systemImage: item.systemImage, help: item.help) {
+				customization.perform(actionID: item.id)
+			}
+		})
+	}
+
+	private func installSiteCustomizationKeyMonitor() {
+		guard siteCustomizationKeyMonitor == nil else { return }
+		siteCustomizationKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+			// Copy plain values out of the event so nothing non-Sendable crosses into the isolated closure.
+			let keyCode = event.keyCode
+			let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+			let windowNumber = event.windowNumber
+			let handled = MainActor.assumeIsolated {
+				self?.handleSiteCustomizationKey(keyCode: keyCode, modifiers: modifiers, windowNumber: windowNumber) == true
+			}
+			return handled ? nil : event
+		}
+	}
+
+	private func handleSiteCustomizationKey(
+		keyCode: UInt16,
+		modifiers: NSEvent.ModifierFlags,
+		windowNumber: Int
+	) -> Bool {
+		let customization = browserViewController.siteCustomization
+		// Escape closes the customization panel, unless the zap picker (which uses Escape itself) is running.
+		if keyCode == Self.escapeKeyCode, modifiers.isEmpty,
+		   customization.isCustomizationPanelVisible, customization.isZapPickerActive == false {
+			customization.dismissCustomizationPanel()
+			return true
+		}
+		guard windowNumber == view.window?.windowNumber else { return false }
+		if keyCode == Self.copyCleanLinkKeyCode, modifiers == [.command, .option, .shift] {
+			customization.copyCleanLink()
+			return true
+		}
+		guard modifiers == [.command, .option] else { return false }
+		switch keyCode {
+		case Self.zapKeyCode:
+			customization.startZapPicker()
+		case Self.customizeKeyCode:
+			customization.toggleCustomizationPanel()
+		default:
+			return false
+		}
+		return true
+	}
+}

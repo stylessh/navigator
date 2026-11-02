@@ -15,6 +15,43 @@ import Vendors
 import XCTest
 
 final class NavigatorKeyboardShortcutTests: XCTestCase {
+	func testResolverMapsLinkHintShortcuts() {
+		XCTAssertEqual(
+			NavigatorKeyboardShortcutResolver.resolveAction(
+				for: UInt16(kVK_ANSI_F),
+				modifiers: [.command, .option],
+				normalizedCharacter: "f",
+				rawCharacter: "ƒ"
+			),
+			.showLinkHints(openInNewTab: false)
+		)
+		XCTAssertEqual(
+			NavigatorKeyboardShortcutResolver.resolveAction(
+				for: UInt16(kVK_ANSI_F),
+				modifiers: [.command, .option, .shift],
+				normalizedCharacter: "f",
+				rawCharacter: "Ï"
+			),
+			.showLinkHints(openInNewTab: true)
+		)
+		XCTAssertNil(
+			NavigatorKeyboardShortcutResolver.resolveAction(
+				for: UInt16(kVK_ANSI_F),
+				modifiers: [.command, .option, .control],
+				normalizedCharacter: "f",
+				rawCharacter: "f"
+			)
+		)
+		XCTAssertNil(
+			NavigatorKeyboardShortcutResolver.resolveAction(
+				for: UInt16(kVK_ANSI_F),
+				modifiers: [.command],
+				normalizedCharacter: "f",
+				rawCharacter: "f"
+			)
+		)
+	}
+
 	func testResolverMapsPrimaryCommandShortcuts() {
 		XCTAssertEqual(
 			NavigatorKeyboardShortcutResolver.resolveAction(
@@ -268,7 +305,8 @@ final class NavigatorKeyboardShortcutTests: XCTestCase {
 			goForward: { performedActions.append(.goForward) },
 			selectNextTab: { performedActions.append(.selectNextTab) },
 			selectPreviousTab: { performedActions.append(.selectPreviousTab) },
-			selectTabAtIndex: { performedActions.append(.selectTab(index: $0)) }
+			selectTabAtIndex: { performedActions.append(.selectTab(index: $0)) },
+			showLinkHints: { performedActions.append(.showLinkHints(openInNewTab: $0)) }
 		)
 
 		let expectedActions: [NavigatorKeyboardShortcutAction] = [
@@ -286,6 +324,8 @@ final class NavigatorKeyboardShortcutTests: XCTestCase {
 			.selectPreviousTab,
 			.selectTab(index: 0),
 			.selectTab(index: 8),
+			.showLinkHints(openInNewTab: false),
+			.showLinkHints(openInNewTab: true),
 		]
 
 		for action in expectedActions {
