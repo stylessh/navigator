@@ -273,8 +273,9 @@ REQUIRED_HELPERS=(
   "${APP_EXECUTABLE} Helper.app"
   "${APP_EXECUTABLE} Helper (Renderer).app"
   "${APP_EXECUTABLE} Helper (GPU).app"
-  "${APP_EXECUTABLE} Helper (Plugin).app"
 )
+# The Plugin helper is optional: official CEF distributions since 156 no longer
+# ship one, and CEFPackager / BundleCEFRuntime.sh already treat it as optional.
 MISSING_HELPERS=0
 for required_helper in "${REQUIRED_HELPERS[@]}"; do
   if [ -d "${APP_FRAMEWORKS}/${required_helper}" ]; then
