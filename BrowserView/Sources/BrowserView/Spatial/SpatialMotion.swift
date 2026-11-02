@@ -155,11 +155,24 @@ func spatialPerformOnMain(_ action: @escaping @MainActor () -> Void) {
 		}
 	}
 	else {
-		DispatchQueue.main.async {
+		DispatchQueue.main.sync {
 			MainActor.assumeIsolated {
 				action()
 			}
 		}
+	}
+}
+
+/// Runs `action` on the main actor after `delay` seconds.
+@MainActor
+func spatialAfter(_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) {
+	guard delay > 0 else {
+		action()
+		return
+	}
+	Task { @MainActor in
+		try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+		action()
 	}
 }
 

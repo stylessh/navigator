@@ -246,7 +246,7 @@ final class SpatialTabOverviewView: NSView {
 			if id != interactiveSourceID {
 				// Small stagger by distance from the source card gives the grid a sense of depth.
 				let delay = min(Double(index) * 0.012, 0.12)
-				DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak card] in
+				spatialAfter(delay) { [weak card] in
 					card?.animateAlpha(to: 1, spring: SpatialMotion.zoom)
 					card?.animateScale(to: 1, spring: SpatialMotion.zoom)
 				}
@@ -264,10 +264,9 @@ final class SpatialTabOverviewView: NSView {
 		}
 		layoutSubtreeIfNeeded()
 		chromeAlpha.animate(to: 0, spring: SpatialMotion.zoom)
-		var zoomingCard: SpatialTabOverviewCardView?
+		let zoomingCard = tabID.flatMap { visibleIDs.contains($0) ? cardsByID[$0] : nil }
 		for (id, card) in cardsByID {
 			if id == tabID, let delegate, visibleIDs.contains(id) {
-				zoomingCard = card
 				card.layer?.zPosition = 50
 				card.setScale(1)
 				card.frameSpring.animate(
@@ -282,10 +281,10 @@ final class SpatialTabOverviewView: NSView {
 		}
 		// Hand the screen back to the live page once the zoom has visually landed.
 		let settle = SpatialMotion.prefersReducedMotion ? 0 : SpatialMotion.zoom.settlingDuration * 0.7
-		DispatchQueue.main.asyncAfter(deadline: .now() + settle) { [weak self] in
+		spatialAfter(settle) { [weak self, weak zoomingCard] in
 			guard let self else { return }
 			zoomingCard?.animateAlpha(to: 0, spring: SpatialMotion.highlight)
-			DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+			spatialAfter(0.12) { [weak self] in
 				self?.delegate?.overviewDidFinishDismissing()
 			}
 		}

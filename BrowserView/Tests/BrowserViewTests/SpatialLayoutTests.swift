@@ -48,7 +48,7 @@ final class SpatialSplitLayoutTests: XCTestCase {
 	func testRatioIsClampedAndDividerDragMapsToRatio() {
 		var layout = Layout("a", adding: "b")
 		layout.setRatio(0.01, at: [])
-		XCTAssertEqual(layout.paneFrames(in: rect, gap: 0)["a"]?.width, (1000 * Layout.minimumRatio).rounded())
+		XCTAssertEqual(layout.paneFrames(in: rect, gap: 0)["a"]?.width, CGFloat((1000 * Layout.minimumRatio).rounded()))
 
 		let divider = try! XCTUnwrap(layout.dividers(in: rect, gap: 8).first)
 		XCTAssertEqual(divider.axis, .horizontal)
