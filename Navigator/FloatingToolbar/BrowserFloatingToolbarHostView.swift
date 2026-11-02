@@ -11,6 +11,12 @@ final class BrowserFloatingToolbarHostView: NSHostingView<BrowserFloatingToolbar
 		translatesAutoresizingMaskIntoConstraints = false
 		setContentHuggingPriority(.required, for: .horizontal)
 		setContentHuggingPriority(.required, for: .vertical)
+		// Keep the toolbar's intrinsic size out of the window's fitting-size calculation.
+		// Otherwise assigning the root view controller to a window shrinks the window to the
+		// toolbar's size (~440×N) on a first launch with no saved frame.
+		let belowFittingSize = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.fittingSizeCompression.rawValue - 1)
+		setContentCompressionResistancePriority(belowFittingSize, for: .horizontal)
+		setContentCompressionResistancePriority(belowFittingSize, for: .vertical)
 	}
 
 	@available(*, unavailable)
