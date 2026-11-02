@@ -85,6 +85,7 @@ final class NavigatorDeveloperOverlay {
 		///
 		/// - `NAVIGATOR_DEVOVERLAY_LOG=1`: log every poll result.
 		/// - `NAVIGATOR_DEVOVERLAY_URL=<url>`: navigate the selected tab there after launch.
+		/// - `NAVIGATOR_DEVOVERLAY_HEARTBEAT=1`: set `document.title` to "hb N" every 5 s (no prompt channel).
 		/// - `NAVIGATOR_DEVOVERLAY_OPEN=console|network|element`: open the panel on that tab.
 		/// - `NAVIGATOR_DEVOVERLAY_EVAL=<js>`: evaluate in the console prompt.
 		/// - `NAVIGATOR_DEVOVERLAY_INSPECT=<css selector>`: inspect that element.
@@ -117,6 +118,21 @@ final class NavigatorDeveloperOverlay {
 			}
 			if environment["NAVIGATOR_DEVOVERLAY_LOG"] == "1" {
 				model.onPollDiagnostic = log
+			}
+			// Heartbeat that bypasses the prompt channel: sets document.title every 5 s, so the
+			// app's own titleChangeCallback log shows whether the page still runs injected scripts.
+			if environment["NAVIGATOR_DEVOVERLAY_HEARTBEAT"] == "1" {
+				Task { @MainActor [weak self] in
+					var beat = 0
+					while let self {
+						try? await Task.sleep(for: .seconds(5))
+						beat += 1
+						if let browser = self.browserViewController?.hostedBrowser {
+							log("heartbeat \(beat)")
+							self.browserRuntime.evaluateJavaScriptWithResult(browser, script: "document.title = 'hb \(beat)'") { _, _ in }
+						}
+					}
+				}
 			}
 			log("launch script: \(keys.sorted().joined(separator: ", "))")
 
