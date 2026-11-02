@@ -11,6 +11,7 @@ import Vendors
 @MainActor
 final class NavigatorDeveloperOverlay {
 	let controller = DeveloperOverlayController()
+	private let pageChannel = NavigatorDeveloperOverlayPageChannel()
 	@Dependency(\.browserRuntime) private var browserRuntime
 
 	var model: DeveloperOverlayModel {
@@ -25,12 +26,12 @@ final class NavigatorDeveloperOverlay {
 			currentPageIdentity: { [weak browserViewController] in
 				browserViewController?.hostedBrowser.map { AnyHashable($0) }
 			},
-			evaluate: { [weak browserViewController] script, completion in
-				guard let browser = browserViewController?.hostedBrowser else {
+			evaluate: { [weak self, weak browserViewController] script, completion in
+				guard let self, let browser = browserViewController?.hostedBrowser else {
 					completion(nil, "No page")
 					return
 				}
-				runtime.evaluateJavaScriptInRendererWithResult(browser, script: script, completion: completion)
+				self.pageChannel.evaluate(script, in: browser, runtime: runtime, completion: completion)
 			}
 		)
 		return controller.makeStage(wrapping: browserViewController.view)

@@ -7,9 +7,9 @@ import Foundation
 /// network activity, each stamped with a monotonically increasing revision, so the native side can
 /// ask for "everything after revision N" without the page ever pushing to us.
 ///
-/// Nothing here needs a change to the CEF bridge: it only relies on
-/// `evaluateJavaScriptInRendererWithResult`, which returns the stringified value of the last
-/// expression.
+/// Every script here is a single expression whose value is a string, so the host can carry it over
+/// whatever transport it has (the app wraps it and returns the value via the page-command prompt
+/// channel; see `NavigatorDeveloperOverlayPageChannel`).
 public enum DeveloperOverlayAgentScript {
 	public static let version = 1
 	public static let globalName = "__navigatorDevHUD"

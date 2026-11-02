@@ -542,6 +542,17 @@ static int CEF_CALLBACK miumJSDialogHandlerOnJSDialog(
     );
     return 0;
   }
+  if (std::strcmp(rawMessageText, MiumCEFPageCommandPromptMessage) == 0) {
+    if (suppress_message != nullptr) {
+      *suppress_message = 1;
+    }
+    miumCEFNativeEmitBrowserMessageForMappedBrowser(
+      browser,
+      MiumCEFPageCommandChannel,
+      promptPayload
+    );
+    return 0;
+  }
   return 0;
 }
 
