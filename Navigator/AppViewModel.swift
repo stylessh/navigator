@@ -42,6 +42,11 @@ final class AppViewModel {
 		.navigatorImportedBrowserLibrary
 	) private var importedBrowserLibrary: ImportedBrowserLibrary
 
+	@ObservationIgnored @Shared(.navigatorCommandBarVisitLog) var commandBarVisitLog: NavigatorCommandBarVisitLog
+	@ObservationIgnored var lastRecordedCommandBarURLByTab = [BrowserTabID: String]()
+	@ObservationIgnored var commandBarHostActions = NavigatorCommandBarHostActions()
+	@ObservationIgnored private var cachedImportedCommandBarHistory: (key: [Date], entries: [CommandBarHistoryEntry])?
+
 	let sidebarWidth: Double
 	let sidebarViewModel: BrowserSidebarViewModel
 	let sidebarPresentation: BrowserSidebarPresentation
@@ -110,6 +115,7 @@ final class AppViewModel {
 		}
 		syncSidebarSpacePages()
 		observeSidebarTabState()
+		configureCommandBar()
 		if sessionPersistence.restoresPersistedTabs {
 			persistCurrentTabs()
 		}
@@ -145,6 +151,29 @@ final class AppViewModel {
 
 	func presentNewTabActionBar() {
 		browserActionBarViewModel.presentNewTab()
+	}
+
+	/// All stored tabs across spaces (the sidebar model only holds the active space).
+	func storedTabsForCommandBar() -> [StoredBrowserTab] {
+		$storedBrowserTabs.withLock { $0.tabs }
+	}
+
+	/// Imported Chrome/Arc/Safari history, newest first, capped so ranking stays fast while typing.
+	func importedHistoryForCommandBar(limit: Int = 4000) -> [CommandBarHistoryEntry] {
+		let library = $importedBrowserLibrary.withLock { $0 }
+		let cacheKey = library.records.map(\.importedAt)
+		if let cached = cachedImportedCommandBarHistory, cached.key == cacheKey {
+			return cached.entries
+		}
+		let entries = library.records
+			.flatMap(\.snapshot.importedHistoryEntries)
+			.sorted { $0.visitedAt > $1.visitedAt }
+			.prefix(limit)
+			.map { entry in
+				CommandBarHistoryEntry(url: entry.url, title: entry.title, lastVisitedAt: entry.visitedAt)
+			}
+		cachedImportedCommandBarHistory = (cacheKey, Array(entries))
+		return Array(entries)
 	}
 
 	func presentToast(title: LocalizedStringResource) {
@@ -482,6 +511,9 @@ final class AppViewModel {
 	}
 
 	private func handleSidebarTabConfigurationChange() {
+		if isCommandBarExperimentEnabled {
+			recordCommandBarVisitIfNeeded()
+		}
 		if isStreamingImportSideEffectsSuspended {
 			hasPendingTabPersistence = true
 			return
