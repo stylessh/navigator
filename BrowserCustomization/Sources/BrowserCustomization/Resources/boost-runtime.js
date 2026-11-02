@@ -167,9 +167,9 @@
     var color = accent || "#0A84FF";
     root.innerHTML =
       "<style>" +
-      ".box{position:fixed;border-radius:6px;background:" + color + "22;outline:2px solid " + color + ";" +
+      ".box{position:fixed;opacity:0;border-radius:6px;background:" + color + "22;outline:2px solid " + color + ";" +
       "transition:all .18s cubic-bezier(.2,1.3,.4,1);pointer-events:none}" +
-      ".tag{position:fixed;font:600 11px -apple-system,system-ui;color:#fff;background:" + color + ";" +
+      ".tag{position:fixed;opacity:0;font:600 11px -apple-system,system-ui;color:#fff;background:" + color + ";" +
       "padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis;" +
       "transition:all .18s cubic-bezier(.2,1.3,.4,1);pointer-events:none}" +
       // Top-center: the floating toolbar owns the bottom edge of the window.
