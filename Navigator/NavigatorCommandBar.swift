@@ -5,17 +5,6 @@ import Foundation
 import ModelKit
 import Vendors
 
-// MARK: - Experiment flag
-
-extension NavigatorExperiment {
-	static let commandBar = NavigatorExperiment(
-		id: "commandBar",
-		title: "Command bar",
-		summary: "⌘K opens a Spotlight-style bar that searches open tabs, history and commands. ⌘L and ⌘T use it too. Type @ for tabs, # for history, > for commands, or yt + Tab to search a site.",
-		isEnabledByDefault: true
-	)
-}
-
 // MARK: - Visit log
 
 /// A lightweight, local visit log so the command bar can rank pages by frecency.

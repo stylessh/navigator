@@ -88,9 +88,9 @@ public final class BrowserActionBarViewModel {
 		}
 		switch mode {
 		case .currentTab:
-			nil
+			return nil
 		case .newTab:
-			localized(.placeholderNewTab)
+			return localized(.placeholderNewTab)
 		}
 	}
 

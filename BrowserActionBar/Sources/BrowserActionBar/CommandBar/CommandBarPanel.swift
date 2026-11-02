@@ -288,11 +288,11 @@ public final class CommandBarPanel: NSPanel, NSTextFieldDelegate {
 			viewModel.moveHighlight(by: -1)
 			return true
 		case #selector(NSResponder.moveToEndOfDocument(_:)),
-		     #selector(NSResponder.moveParagraphForward(_:)):
+		     #selector(NSResponder.moveForward(_:)):
 			viewModel.moveHighlightToSection(by: 1)
 			return true
 		case #selector(NSResponder.moveToBeginningOfDocument(_:)),
-		     #selector(NSResponder.moveParagraphBackward(_:)):
+		     #selector(NSResponder.moveBackward(_:)):
 			viewModel.moveHighlightToSection(by: -1)
 			return true
 		case #selector(NSResponder.insertTab(_:)):
