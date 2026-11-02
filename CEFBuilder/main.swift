@@ -917,7 +917,7 @@ func buildAndExportArtifacts(config: BuilderConfig, spec: BuildSpec) throws -> (
 		}
 		else {
 			log(
-				"Skipping Chromium override '\(chromiumCheckoutOverride)' because automate expects a refs/<...> value (for example, refs/tags/145.0.7632.117) in --chromium-checkout.",
+				"Skipping Chromium override '\(chromiumCheckoutOverride)' because automate expects a refs/<...> value (for example, refs/tags/156.0.8078.80) in --chromium-checkout.",
 				config.verbose
 			)
 		}

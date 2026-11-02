@@ -55,7 +55,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "$(PROJECT_DIR)/Vendor/CEF/BuildSpecs/cef_145_codec_arm64.json"
+            argument = "$(PROJECT_DIR)/Vendor/CEF/BuildSpecs/cef_156_codec_arm64.json"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

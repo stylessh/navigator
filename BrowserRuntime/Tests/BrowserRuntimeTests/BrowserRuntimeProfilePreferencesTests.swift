@@ -50,3 +50,39 @@ final class BrowserRuntimeProfilePreferencesTests: XCTestCase {
 		XCTAssertTrue(sanitized.isEmpty)
 	}
 }
+
+final class BrowserRuntimeCacheRotationTests: XCTestCase {
+	func testKeepsProfileWhenMarkerMatches() {
+		XCTAssertFalse(BrowserRuntime.cacheRequiresRotation(
+			existingMarker: "schema=1|156.0.8078.80",
+			currentMarker: "schema=1|156.0.8078.80"
+		))
+	}
+
+	func testKeepsProfileOnCEFUpgrade() {
+		XCTAssertFalse(BrowserRuntime.cacheRequiresRotation(
+			existingMarker: "schema=1|145.0.7632.117",
+			currentMarker: "schema=1|156.0.8078.80"
+		))
+	}
+
+	func testRotatesOnCEFDowngrade() {
+		XCTAssertTrue(BrowserRuntime.cacheRequiresRotation(
+			existingMarker: "schema=1|156.0.8078.80",
+			currentMarker: "schema=1|145.0.7632.117"
+		))
+	}
+
+	func testRotatesOnSchemaChange() {
+		XCTAssertTrue(BrowserRuntime.cacheRequiresRotation(
+			existingMarker: "schema=1|156.0.8078.80",
+			currentMarker: "schema=2|156.0.8078.80"
+		))
+	}
+
+	func testRotatesWhenMarkerMissingOrUnreadable() {
+		XCTAssertTrue(BrowserRuntime.cacheRequiresRotation(existingMarker: nil, currentMarker: "schema=1|156.0.8078.80"))
+		XCTAssertTrue(BrowserRuntime.cacheRequiresRotation(existingMarker: "garbage", currentMarker: "schema=1|156.0.8078.80"))
+		XCTAssertTrue(BrowserRuntime.cacheRequiresRotation(existingMarker: "schema=1|", currentMarker: "schema=1|156.0.8078.80"))
+	}
+}

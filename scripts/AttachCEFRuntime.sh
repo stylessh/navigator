@@ -139,6 +139,22 @@ sign_bundle() {
 
 sign_bundle "${CEF_DEST_FRAMEWORK}" 1 "Chromium Embedded Framework"
 
+# Helpers need their role's entitlements (allow-jit etc.). A plain
+# `codesign --force` drops whatever entitlements the source helper carried.
+helper_entitlements_args() {
+  local helper_name="$1"
+  local plist=""
+  case "${helper_name}" in
+    *"(Renderer).app") plist="${PROJECT_DIR}/scripts/entitlements/helper_renderer.plist" ;;
+    *"(GPU).app") plist="${PROJECT_DIR}/scripts/entitlements/helper_gpu.plist" ;;
+    *"(Plugin).app") plist="${PROJECT_DIR}/scripts/entitlements/helper_plugin.plist" ;;
+    *) plist="${PROJECT_DIR}/scripts/entitlements/helper.plist" ;;
+  esac
+  if [ -f "${plist}" ]; then
+    printf '%s\n' "--entitlements" "${plist}"
+  fi
+}
+
 copy_helper() {
   local helper_name="$1"
   local required="$2"
@@ -162,7 +178,9 @@ copy_helper() {
       if [ -z "${sign_identity}" ]; then
         sign_identity="-"
       fi
-      /usr/bin/codesign --force --sign "${sign_identity}" --timestamp\=none "${target_helper}" || {
+      local entitlement_args=()
+      while IFS= read -r arg; do entitlement_args+=("${arg}"); done < <(helper_entitlements_args "${helper_name}")
+      /usr/bin/codesign --force --sign "${sign_identity}" --timestamp\=none "${entitlement_args[@]}" "${target_helper}" || {
         if [ "${required}" = "1" ] || [ "${should_require_sign}" = "1" ]; then
           echo "[AttachCEFRuntime] failed to sign helper ${helper_name} with identity ${sign_identity}" >&2
           return 1
@@ -273,8 +291,9 @@ REQUIRED_HELPERS=(
   "${APP_EXECUTABLE} Helper.app"
   "${APP_EXECUTABLE} Helper (Renderer).app"
   "${APP_EXECUTABLE} Helper (GPU).app"
-  "${APP_EXECUTABLE} Helper (Plugin).app"
 )
+# The Plugin helper is optional: official CEF distributions since 156 no longer
+# ship one, and CEFPackager / BundleCEFRuntime.sh already treat it as optional.
 MISSING_HELPERS=0
 for required_helper in "${REQUIRED_HELPERS[@]}"; do
   if [ -d "${APP_FRAMEWORKS}/${required_helper}" ]; then
@@ -288,7 +307,9 @@ for required_helper in "${REQUIRED_HELPERS[@]}"; do
       if [ -z "${sign_identity}" ]; then
         sign_identity="-"
       fi
-      /usr/bin/codesign --force --sign "${sign_identity}" --timestamp\=none "${APP_FRAMEWORKS}/${required_helper}" || {
+      fallback_entitlement_args=()
+      while IFS= read -r arg; do fallback_entitlement_args+=("${arg}"); done < <(helper_entitlements_args "${required_helper}")
+      /usr/bin/codesign --force --sign "${sign_identity}" --timestamp\=none "${fallback_entitlement_args[@]}" "${APP_FRAMEWORKS}/${required_helper}" || {
         echo "[AttachCEFRuntime] warning: failed to sign fallback required helper ${required_helper}; continuing" >&2
       }
     fi
