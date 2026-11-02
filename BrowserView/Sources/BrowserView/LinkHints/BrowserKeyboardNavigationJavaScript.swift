@@ -12,6 +12,25 @@ import Foundation
 enum BrowserKeyboardNavigationJavaScript {
 	static let showLinkHintsCommand = "linkHints.show"
 	static let openInNewTabArgument = "newTab"
+	/// Carries the collected targets back to the app (`payload` = JSON, `token` = request id).
+	static let targetsCommand = "linkHints.targets"
+	/// Asks the app to open `url` in a new tab after a hint was chosen with "open in new tab".
+	static let openURLCommand = "linkHints.openURL"
+	static let payloadArgument = "payload"
+	static let tokenArgument = "token"
+	static let urlArgument = "url"
+
+	/// `CEFBridge_ExecuteJavaScriptWithResult` only reports that a script was dispatched, not
+	/// its value, so scripts that need to answer the app post a page command instead.
+	private static func targetsArguments(token: Int) -> String {
+		"{ \(payloadArgument): payload, \(tokenArgument): \"\(token)\" }"
+	}
+
+	private static func emitCommandJavaScript(name: String, argumentsExpression: String) -> String {
+		"""
+		try { window.prompt("\(BrowserRuntimePageCommand.promptMessage)", JSON.stringify({ name: "\(name)", arguments: \(argumentsExpression) })); } catch (_) {}
+		"""
+	}
 
 	/// Shared editable-focus test, embedded in each script so they can run independently.
 	private static let isEditableFunction = """
@@ -143,7 +162,8 @@ enum BrowserKeyboardNavigationJavaScript {
 	/// Collects visible clickable elements in the main frame and stores them on `window` so a
 	/// later activation can reference them by index. Returns JSON:
 	/// `{"viewport":{"width":…,"height":…},"targets":[{"x":…,"y":…,"width":…,"height":…,"kind":"link"}]}`
-	static let collectTargetsScript = """
+	static func collectTargetsScript(token: Int) -> String {
+		"""
 	(function() {
 	  const selector = [
 	    "a[href]", "button", "input:not([type=hidden])", "select", "textarea", "summary", "label[for]",
@@ -220,7 +240,7 @@ enum BrowserKeyboardNavigationJavaScript {
 	  const limit = 600;
 	  const items = collected.slice(0, limit);
 	  window.__navigatorLinkHintTargets = items.map(function(item) { return item.el; });
-	  return JSON.stringify({
+	  const payload = JSON.stringify({
 	    viewport: { width: viewportWidth, height: viewportHeight },
 	    targets: items.map(function(item) {
 	      return {
@@ -232,8 +252,11 @@ enum BrowserKeyboardNavigationJavaScript {
 	      };
 	    })
 	  });
+	  \(emitCommandJavaScript(name: targetsCommand, argumentsExpression: targetsArguments(token: token)))
+	  return payload;
 	})();
 	"""
+	}
 
 	/// Activates the target at `index` from the last collection. Returns JSON:
 	/// `{"result":"clicked"|"focused"|"openURL"|"missing","url":"…"}`.
@@ -249,7 +272,9 @@ enum BrowserKeyboardNavigationJavaScript {
 		  \(isEditableFunction)
 		  const tag = el.tagName.toLowerCase();
 		  if (\(openInNewTab ? "true" : "false") && tag === "a" && el.href) {
-		    return JSON.stringify({ result: "openURL", url: el.href });
+		    const url = el.href;
+		    \(emitCommandJavaScript(name: openURLCommand, argumentsExpression: "{ \(urlArgument): url }"))
+		    return JSON.stringify({ result: "openURL", url: url });
 		  }
 		  if (__navIsEditable(el)) {
 		    el.focus({ preventScroll: true });

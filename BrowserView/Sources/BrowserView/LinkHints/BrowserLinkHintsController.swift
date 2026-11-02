@@ -11,16 +11,24 @@ import Vendors
 @MainActor
 final class BrowserLinkHintsController {
 	struct Environment {
-		/// Evaluates a script in the given browser's main frame and returns its string result.
-		var evaluateJavaScript: (CEFBridgeBrowserRef, String, @escaping @MainActor (String?) -> Void) -> Void
+		/// Runs a script in the given browser's main frame. Results come back as page commands
+		/// (see `handlePageCommand`), because the browser-process bridge does not return values.
+		var evaluateJavaScript: (CEFBridgeBrowserRef, String) -> Void
 		/// Opens `url` in a new background tab.
 		var openURLInNewTab: (String) -> Void
 	}
 
 	private enum State {
 		case idle
-		case collecting(token: Int)
+		case collecting(Request)
 		case showing(BrowserLinkHintSession, Active)
+	}
+
+	private struct Request {
+		var token: Int
+		var browser: CEFBridgeBrowserRef
+		weak var hostView: NSView?
+		var openInNewTab: Bool
 	}
 
 	private struct Active {
@@ -58,21 +66,46 @@ final class BrowserLinkHintsController {
 
 		nextToken += 1
 		let token = nextToken
-		state = .collecting(token: token)
-		environment.evaluateJavaScript(browser, BrowserKeyboardNavigationJavaScript.collectTargetsScript) {
-			[weak self, weak hostView] result in
-			guard let self, let hostView else { return }
-			guard case let .collecting(currentToken) = self.state, currentToken == token else { return }
-			guard let result,
-			      let collection = BrowserLinkHintCollection.from(json: result),
+		state = .collecting(Request(token: token, browser: browser, hostView: hostView, openInNewTab: openInNewTab))
+		environment.evaluateJavaScript(browser, BrowserKeyboardNavigationJavaScript.collectTargetsScript(token: token))
+		// If the page never answers (crashed renderer, blocked script), drop the request.
+		Task { @MainActor [weak self] in
+			try? await Task.sleep(for: .seconds(2))
+			guard let self, case let .collecting(request) = self.state, request.token == token else { return }
+			self.state = .idle
+		}
+	}
+
+	/// Handles link-hint page commands from `browser`. Returns true when the command was consumed.
+	@discardableResult
+	func handlePageCommand(_ command: BrowserRuntimePageCommand, from browser: CEFBridgeBrowserRef) -> Bool {
+		switch command.name {
+		case BrowserKeyboardNavigationJavaScript.targetsCommand:
+			guard case let .collecting(request) = state,
+			      request.browser == browser,
+			      command.arguments[BrowserKeyboardNavigationJavaScript.tokenArgument] == String(request.token)
+			else {
+				return true
+			}
+			guard let hostView = request.hostView,
+			      let payload = command.arguments[BrowserKeyboardNavigationJavaScript.payloadArgument],
+			      let collection = BrowserLinkHintCollection.from(json: payload),
 			      collection.targets.isEmpty == false,
 			      collection.viewport.width > 0
 			else {
-				self.state = .idle
+				state = .idle
 				NSSound.beep()
-				return
+				return true
 			}
-			self.show(collection: collection, browser: browser, hostView: hostView, openInNewTab: openInNewTab)
+			show(collection: collection, browser: browser, hostView: hostView, openInNewTab: request.openInNewTab)
+			return true
+		case BrowserKeyboardNavigationJavaScript.openURLCommand:
+			if let url = command.arguments[BrowserKeyboardNavigationJavaScript.urlArgument], url.isEmpty == false {
+				environment.openURLInNewTab(url)
+			}
+			return true
+		default:
+			return false
 		}
 	}
 
@@ -84,7 +117,7 @@ final class BrowserLinkHintsController {
 			state = .idle
 		case let .showing(_, active):
 			state = .idle
-			environment.evaluateJavaScript(active.browser, BrowserKeyboardNavigationJavaScript.clearTargetsScript) { _ in }
+			environment.evaluateJavaScript(active.browser, BrowserKeyboardNavigationJavaScript.clearTargetsScript)
 			let overlay = active.overlay
 			restoreFirstResponder(active)
 			overlay.dismiss { overlay.removeFromSuperview() }
@@ -176,18 +209,8 @@ final class BrowserLinkHintsController {
 			index: hint.id,
 			openInNewTab: openInNewTab
 		)
-		environment.evaluateJavaScript(browser, script) { [weak self] result in
-			guard let self,
-			      let result,
-			      let data = result.data(using: .utf8),
-			      let response = try? JSONDecoder().decode(ActivationResponse.self, from: data)
-			else {
-				return
-			}
-			if response.result == "openURL", let url = response.url, url.isEmpty == false {
-				self.environment.openURLInNewTab(url)
-			}
-		}
+		// "Open in new tab" answers with an `openURL` page command.
+		environment.evaluateJavaScript(browser, script)
 	}
 
 	private func restoreFirstResponder(_ active: Active) {
@@ -200,11 +223,6 @@ final class BrowserLinkHintsController {
 		else {
 			window.makeFirstResponder(nil)
 		}
-	}
-
-	private struct ActivationResponse: Decodable {
-		var result: String
-		var url: String?
 	}
 }
 

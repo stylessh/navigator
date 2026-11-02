@@ -312,11 +312,8 @@ final class BrowserChromeView: NSView {
 	private var lastManagedCameraFrameDeliveryTime: TimeInterval?
 	private lazy var linkHintsController = BrowserLinkHintsController(
 		environment: .init(
-			evaluateJavaScript: { [weak self] browser, script, completion in
-				guard let self else { return }
-				self.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { result, _ in
-					completion(result)
-				}
+			evaluateJavaScript: { [weak self] browser, script in
+				self?.browserRuntime.evaluateJavaScriptWithResult(browser, script: script) { _, _ in }
 			},
 			openURLInNewTab: { [weak self] url in
 				self?.sidebarViewModel.openNewTab(with: url, activate: false)
@@ -2013,11 +2010,18 @@ final class BrowserChromeView: NSView {
 			guard let self else { return }
 			guard self.lifecycleGeneration == lifecycleGeneration else { return }
 			guard self.browserContainersByTabID[tabID]?.browserRef == browser else { return }
-			self.handlePageCommand(command, tabID: tabID)
+			self.handlePageCommand(command, tabID: tabID, browser: browser)
 		}
 	}
 
-	private func handlePageCommand(_ command: BrowserRuntimePageCommand, tabID: BrowserTabID) {
+	private func handlePageCommand(
+		_ command: BrowserRuntimePageCommand,
+		tabID: BrowserTabID,
+		browser: CEFBridgeBrowserRef
+	) {
+		if linkHintsController.handlePageCommand(command, from: browser) {
+			return
+		}
 		switch command.name {
 		case BrowserKeyboardNavigationJavaScript.showLinkHintsCommand:
 			// Only the visible tab can show hints; a background tab's key events are stale.
