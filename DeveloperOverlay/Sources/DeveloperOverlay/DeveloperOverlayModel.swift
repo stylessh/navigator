@@ -134,6 +134,8 @@ public final class DeveloperOverlayModel {
 		didSet { resetForNewPage(clear: true) }
 	}
 
+	/// Diagnostic line for every poll result, e.g. for launch-time smoke tests reading stdout.
+	@ObservationIgnored public var onPollDiagnostic: ((String) -> Void)?
 	@ObservationIgnored public var activePollInterval: Duration = .milliseconds(400)
 	@ObservationIgnored public var idlePollInterval: Duration = .milliseconds(1500)
 	@ObservationIgnored private var revision = 0
@@ -250,6 +252,16 @@ public final class DeveloperOverlayModel {
 		run(DeveloperOverlayAgentScript.stopPicking)
 	}
 
+	/// Inspects the first element matching a CSS selector (scripting / automation).
+	public func inspect(selector: String) {
+		run(DeveloperOverlayAgentScript.inspect(selector: selector))
+	}
+
+	/// Runs arbitrary script in the page without logging it (automation hooks such as navigation).
+	public func runInPage(_ script: String) {
+		run(script)
+	}
+
 	public func clearInspectedElement() {
 		inspectedElement = nil
 		run(DeveloperOverlayAgentScript.clearPicked)
@@ -264,6 +276,7 @@ public final class DeveloperOverlayModel {
 		bridge.evaluate(DeveloperOverlayAgentScript.evaluate(trimmed)) { [weak self] result, error in
 			guard let self else { return }
 			let parsed = DeveloperEvaluationResult.parse(result: result, error: error)
+			self.onPollDiagnostic?("eval \(trimmed) -> ok=\(parsed.ok) \(parsed.text)")
 			self.appendLocal(level: parsed.ok ? .result : .error, text: parsed.text)
 			self.pollNow()
 		}
@@ -364,6 +377,21 @@ public final class DeveloperOverlayModel {
 	}
 
 	func apply(_ result: DeveloperOverlayPayload.PollResult) {
+		if let onPollDiagnostic {
+			switch result {
+			case let .payload(payload):
+				onPollDiagnostic(
+					"poll rev=\(payload.revision) console+=\(payload.console.count) network+=\(payload.network.count) "
+						+ "picked=\(payload.picked?.value?.selector ?? "-") picking=\(payload.isPicking) "
+						+ "theme=\(payload.themeColor ?? "-") url=\(payload.url) "
+						+ "totals console=\(consoleEntries.count) network=\(networkEntries.count)"
+				)
+			case .agentMissing:
+				onPollDiagnostic("poll agent-missing (installing)")
+			case let .failure(message):
+				onPollDiagnostic("poll failure: \(message)")
+			}
+		}
 		switch result {
 		case let .payload(payload):
 			lastError = nil

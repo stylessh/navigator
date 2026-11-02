@@ -483,6 +483,17 @@ public enum DeveloperOverlayAgentScript {
 	    removeHighlight();
 	  }
 
+	  function inspectSelector(selector) {
+	    var element = document.querySelector(selector);
+	    if (!element) { return "not found"; }
+	    stopPicking(true);
+	    picked = describe(element);
+	    pickedRev = nextRev();
+	    pickedElement = element;
+	    moveHighlight(element);
+	    return "ok";
+	  }
+
 	  function refreshPicked() {
 	    if (!pickedElement || !pickedElement.isConnected) { return; }
 	    picked = describe(pickedElement);
@@ -568,6 +579,7 @@ public enum DeveloperOverlayAgentScript {
 	    startPicking: startPicking,
 	    stopPicking: function () { stopPicking(false); },
 	    clearPicked: clearPicked,
+	    inspectSelector: inspectSelector,
 	    refreshPicked: refreshPicked
 	  };
 	  return "installed";
@@ -594,6 +606,11 @@ public enum DeveloperOverlayAgentScript {
 		return result === undefined ? "ok" : result; \
 		})()
 		"""
+	}
+
+	/// Selects the first element matching `selector`, as if it had been picked.
+	public static func inspect(selector: String) -> String {
+		call("inspectSelector", arguments: [selector])
 	}
 
 	public static func evaluate(_ source: String) -> String {
