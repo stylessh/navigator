@@ -51,7 +51,7 @@ struct BoostTests {
 	}
 
 	@Test func decodesMinimalManifestWithDefaults() throws {
-		let json = #"{ "id": "hn", "matches": ["news.ycombinator.com"], "tint": "#f60" }"#
+		let json = ##"{ "id": "hn", "matches": ["news.ycombinator.com"], "tint": "#f60" }"##
 		let boost = try JSONDecoder().decode(Boost.self, from: Data(json.utf8))
 		#expect(boost.isEnabled)
 		#expect(boost.allowsJavaScript == false)

@@ -1,4 +1,5 @@
 import BrowserRuntime
+import BrowserSidebar
 import ModelKit
 
 /// Closures BrowserChromeView calls as pages move through their lifecycle.

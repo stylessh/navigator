@@ -2,6 +2,7 @@ import AppKit
 import BrowserCustomization
 import BrowserCustomizationUI
 import BrowserRuntime
+import BrowserSidebar
 import ModelKit
 import Observation
 import SwiftUI
