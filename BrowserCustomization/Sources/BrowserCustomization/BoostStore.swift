@@ -24,16 +24,16 @@ public final class BoostStore {
 	private let fileManager: FileManager
 	@ObservationIgnored private var observers: [UUID: @MainActor () -> Void] = [:]
 
-	public static let manifestFileName = "boost.json"
-	public static let styleFileName = "style.css"
-	public static let scriptFileName = "script.js"
+	public nonisolated static let manifestFileName = "boost.json"
+	public nonisolated static let styleFileName = "style.css"
+	public nonisolated static let scriptFileName = "script.js"
 
 	public init(directory: URL, fileManager: FileManager = .default) {
 		self.directory = directory
 		self.fileManager = fileManager
 	}
 
-	public static func defaultDirectory(fileManager: FileManager = .default) -> URL {
+	public nonisolated static func defaultDirectory(fileManager: FileManager = .default) -> URL {
 		let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
 			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
 		return base.appendingPathComponent("Navigator/Boosts", isDirectory: true)
