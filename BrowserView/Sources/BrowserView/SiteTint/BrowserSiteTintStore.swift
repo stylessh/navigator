@@ -93,15 +93,13 @@ public final class BrowserSiteTintStore {
 		recompute()
 	}
 
-	/// A new main-frame URL. Keeps the old sample when staying on the same host so in-site
-	/// navigation doesn't flash back to neutral before the next sample lands.
+	/// A new main-frame URL. The previous page's sample stays on screen until the new page's
+	/// first sample lands (a fraction of a second later), so the chrome springs straight from
+	/// one site's color to the next instead of dipping to neutral in between. A user override
+	/// for the new host applies immediately.
 	public func noteURL(_ url: String, for tabID: BrowserTabID) {
-		let host = URLComponents(string: url)?.host
 		var entry = entriesByTabID[tabID] ?? Entry()
-		if BrowserSiteTintOverrides.normalizedHost(entry.host) != BrowserSiteTintOverrides.normalizedHost(host) {
-			entry.sample = nil
-		}
-		entry.host = host
+		entry.host = URLComponents(string: url)?.host
 		update(entry, for: tabID)
 	}
 

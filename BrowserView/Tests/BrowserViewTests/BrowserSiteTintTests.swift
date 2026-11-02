@@ -126,13 +126,27 @@ final class BrowserSiteTintStoreTests: XCTestCase {
 		XCTAssertEqual(changes.count, 2)
 	}
 
-	func testCrossHostNavigationClearsSampleButSameHostKeepsIt() {
+	func testNavigationKeepsPreviousColorUntilNextSample() {
 		let store = BrowserSiteTintStore(overrides: .init(), isEnabled: true)
+		var changes = [BrowserSiteTint?]()
+		store.onTintChange = { changes.append($0) }
 		store.selectTab(tabA)
 		store.noteURL("https://a.example/one", for: tabA)
 		store.record(.init(themeColor: red), for: tabA)
-		store.noteURL("https://www.a.example/two", for: tabA)
-		XCTAssertEqual(store.currentTint?.color, red)
+		store.noteURL("https://other.example/", for: tabA)
+		XCTAssertEqual(store.currentTint?.color, red, "no dip to neutral mid-navigation")
+		store.record(.init(themeColor: blue), for: tabA)
+		XCTAssertEqual(store.currentTint?.color, blue)
+		XCTAssertEqual(changes.map { $0?.color }, [red, blue])
+	}
+
+	func testOverrideForNewHostAppliesOnNavigation() {
+		let overrides = BrowserSiteTintOverrides()
+		overrides.setOverride(.disabled, forHost: "other.example")
+		let store = BrowserSiteTintStore(overrides: overrides, isEnabled: true)
+		store.selectTab(tabA)
+		store.noteURL("https://a.example/", for: tabA)
+		store.record(.init(themeColor: red), for: tabA)
 		store.noteURL("https://other.example/", for: tabA)
 		XCTAssertNil(store.currentTint)
 	}
