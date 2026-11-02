@@ -262,6 +262,7 @@ import Vendors
 		fileMenu.addItem(openLocationMenuItem)
 		addSubmenu(fileMenu, titled: "File", to: mainMenu)
 		addSubmenu(makeEditMenu(), titled: String(localized: .navigatorMenuEditTitle), to: mainMenu)
+		installLinkHintsMenuItems(in: mainMenu)
 
 		NSApp.mainMenu = mainMenu
 	}
@@ -786,6 +787,9 @@ import Vendors
 			},
 			selectTabAtIndex: { [weak self] index in
 				self?.activeNavigatorAppViewModel().sidebarViewModel.selectTab(at: index)
+			},
+			showLinkHints: { [weak self] openInNewTab in
+				self?.beginLinkHintsInActiveWindow(openInNewTab: openInNewTab)
 			}
 		)
 	}
@@ -963,11 +967,11 @@ import Vendors
 		return window
 	}
 
-	private func browserWindowContent(for window: NSWindow?) -> (NSViewController & NavigatorBrowserWindowContent)? {
+	func browserWindowContent(for window: NSWindow?) -> (NSViewController & NavigatorBrowserWindowContent)? {
 		window?.contentViewController as? (NSViewController & NavigatorBrowserWindowContent)
 	}
 
-	private func preferredBrowserWindow() -> NSWindow? {
+	func preferredBrowserWindow() -> NSWindow? {
 		for candidate in [NSApp.keyWindow, NSApp.mainWindow] {
 			if let candidate, browserWindowContent(for: candidate) != nil {
 				return candidate
