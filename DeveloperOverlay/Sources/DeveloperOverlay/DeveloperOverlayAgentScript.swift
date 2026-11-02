@@ -514,6 +514,29 @@ public enum DeveloperOverlayAgentScript {
 
 	  // Polling --------------------------------------------------------------
 
+	  // The page's own accent, used to tint the overlay glass (meta theme-color, else the body background).
+	  function themeColor() {
+	    try {
+	      var meta = document.querySelector('meta[name="theme-color"]:not([media]), meta[name="theme-color"]');
+	      if (meta && meta.content) {
+	        var probe = document.createElement("span");
+	        probe.style.color = meta.content;
+	        probe.style.display = "none";
+	        document.documentElement.appendChild(probe);
+	        var resolved = getComputedStyle(probe).color;
+	        probe.parentNode.removeChild(probe);
+	        if (resolved) { return resolved; }
+	      }
+	      var candidates = [document.body, document.documentElement];
+	      for (var i = 0; i < candidates.length; i += 1) {
+	        if (!candidates[i]) { continue; }
+	        var background = getComputedStyle(candidates[i]).backgroundColor;
+	        if (background && background !== "rgba(0, 0, 0, 0)" && background !== "transparent") { return background; }
+	      }
+	    } catch (e) {}
+	    return null;
+	  }
+
 	  function drain(since) {
 	    since = since || 0;
 	    var consoleOut = [];
@@ -533,6 +556,7 @@ public enum DeveloperOverlayAgentScript {
 	      picking: picking,
 	      url: location.href,
 	      title: document.title,
+	      theme: themeColor(),
 	      viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 }
 	    });
 	  }

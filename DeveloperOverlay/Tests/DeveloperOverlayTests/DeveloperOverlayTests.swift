@@ -9,7 +9,7 @@ final class DeveloperOverlayPayloadTests: XCTestCase {
 		"picked":{"value":{"selector":"#app > button","tag":"button","id":null,"classes":["btn"],"rect":{"x":1,"y":2,"w":48,"h":32},
 		"margin":{"t":4,"r":4,"b":4,"l":4},"padding":{"t":8,"r":16,"b":8,"l":16},"border":{"t":0,"r":0,"b":0,"l":0},
 		"styles":{"display":"block","color":"rgb(0, 0, 0)"},"text":"Hi","children":0}},
-		"picking":false,"url":"https://example.com/","title":"Example","viewport":{"w":393,"h":852,"dpr":3}}
+		"picking":false,"url":"https://example.com/","title":"Example","viewport":{"w":393,"h":852,"dpr":3},"theme":"rgb(255, 85, 0)"}
 		"""
 		guard case let .payload(payload) = DeveloperOverlayPayload.parsePoll(result: json, error: nil) else {
 			return XCTFail("Expected payload")
@@ -26,6 +26,9 @@ final class DeveloperOverlayPayloadTests: XCTestCase {
 		XCTAssertEqual(element.margin.shorthand, "4")
 		XCTAssertTrue(element.border.isZero)
 		XCTAssertEqual(payload.viewport?.devicePixelRatio, 3)
+		XCTAssertEqual(payload.themeColor, "rgb(255, 85, 0)")
+		XCTAssertNotNil(DeveloperFormat.tint(fromCSS: "rgb(255, 85, 0)"))
+		XCTAssertNil(DeveloperFormat.tint(fromCSS: "rgb(255, 255, 255)"))
 	}
 
 	func testMissingSentinelAndErrors() {

@@ -231,6 +231,11 @@ struct DeveloperConsoleView: View {
 
 struct DeveloperConsoleRow: View {
 	let entry: DeveloperConsoleEntry
+	@Environment(\.developerCopy) private var copy
+
+	init(entry: DeveloperConsoleEntry) {
+		self.entry = entry
+	}
 
 	var body: some View {
 		if entry.level == .system {
@@ -277,8 +282,7 @@ struct DeveloperConsoleRow: View {
 			.background(rowBackground)
 			.contextMenu {
 				Button("Copy Message") {
-					NSPasteboard.general.clearContents()
-					NSPasteboard.general.setString(entry.text, forType: .string)
+					copy(entry.text, label: "message")
 				}
 			}
 		}
@@ -406,6 +410,13 @@ struct DeveloperNetworkRow: View {
 	let entry: DeveloperNetworkEntry
 	let timeline: ClosedRange<Double>
 	let isExpanded: Bool
+	@Environment(\.developerCopy) private var copyAction
+
+	init(entry: DeveloperNetworkEntry, timeline: ClosedRange<Double>, isExpanded: Bool) {
+		self.entry = entry
+		self.timeline = timeline
+		self.isExpanded = isExpanded
+	}
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 4) {
@@ -447,8 +458,8 @@ struct DeveloperNetworkRow: View {
 						Text(error).font(.system(size: 10)).foregroundStyle(.red)
 					}
 					HStack {
-						Button("Copy URL") { copy(entry.url) }
-						Button("Copy as cURL") { copy("curl -X \(entry.method) '\(entry.url)'") }
+						Button("Copy URL") { copyAction(entry.url, label: "URL") }
+						Button("Copy as cURL") { copyAction("curl -X \(entry.method) '\(entry.url)'", label: "cURL") }
 					}
 					.controlSize(.small)
 					.buttonStyle(.borderless)
@@ -521,10 +532,6 @@ struct DeveloperNetworkRow: View {
 		}
 	}
 
-	private func copy(_ string: String) {
-		NSPasteboard.general.clearContents()
-		NSPasteboard.general.setString(string, forType: .string)
-	}
 }
 
 // MARK: - Element
@@ -602,8 +609,7 @@ struct DeveloperElementView: View {
 					.textSelection(.enabled)
 				Spacer()
 				DeveloperIconButton(systemImage: "doc.on.doc", help: "Copy selector", size: 22) {
-					NSPasteboard.general.clearContents()
-					NSPasteboard.general.setString(element.selector, forType: .string)
+					model.copy(element.selector, label: "selector")
 				}
 			}
 		}
@@ -781,6 +787,14 @@ enum DeveloperFormat {
 
 	static func points(_ value: Double) -> String {
 		value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
+	}
+
+	/// A tint for the glass from a CSS color, or nil for near-grays (white/black pages stay neutral).
+	static func tint(fromCSS value: String) -> Color? {
+		guard let color = color(fromCSS: value) else { return nil }
+		let nsColor = NSColor(color).usingColorSpace(.sRGB) ?? .gray
+		guard nsColor.saturationComponent > 0.18, nsColor.alphaComponent > 0.5 else { return nil }
+		return color.opacity(0.55)
 	}
 
 	/// Parses `rgb(…)` / `rgba(…)` from computed styles into a swatch color.

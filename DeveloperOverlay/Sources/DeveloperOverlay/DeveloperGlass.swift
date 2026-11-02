@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Liquid Glass for the developer overlay.
@@ -94,6 +95,20 @@ final class DeveloperOverlayHitRegions {
 
 extension EnvironmentValues {
 	@Entry var developerHitRegions: DeveloperOverlayHitRegions?
+	/// Copies text and shows a confirmation: `(text, label)`.
+	@Entry var developerCopy: DeveloperCopyAction = DeveloperCopyAction { text, _ in
+		NSPasteboard.general.clearContents()
+		NSPasteboard.general.setString(text, forType: .string)
+	}
+}
+
+struct DeveloperCopyAction: Sendable {
+	let perform: @MainActor @Sendable (String, String) -> Void
+
+	@MainActor
+	func callAsFunction(_ text: String, label: String) {
+		perform(text, label)
+	}
 }
 
 private struct DeveloperHitRegionModifier: ViewModifier {

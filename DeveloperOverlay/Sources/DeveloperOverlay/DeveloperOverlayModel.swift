@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Observation
@@ -109,6 +110,11 @@ public final class DeveloperOverlayModel {
 	public private(set) var pageURL = ""
 	public private(set) var pageTitle = ""
 	public private(set) var pageViewport: DeveloperOverlayPayload.Viewport?
+	/// The page's accent color (CSS), used to tint the glass like Arc tints its chrome per site.
+	public private(set) var pageThemeColor: String?
+	/// Short confirmation ("Copied selector") that springs in under the HUD.
+	public private(set) var transientMessage: String?
+	@ObservationIgnored private var transientTask: Task<Void, Never>?
 	public private(set) var lastError: String?
 	/// Errors seen since the console tab was last viewed; drives the badge on the HUD capsule.
 	public private(set) var unseenErrorCount = 0
@@ -204,6 +210,25 @@ public final class DeveloperOverlayModel {
 
 	public func clearNetwork() {
 		networkEntries.removeAll()
+	}
+
+	// MARK: Feedback
+
+	/// Copies `text` and shows a brief confirmation.
+	public func copy(_ text: String, label: String) {
+		NSPasteboard.general.clearContents()
+		NSPasteboard.general.setString(text, forType: .string)
+		showTransient("Copied \(label)")
+	}
+
+	public func showTransient(_ message: String) {
+		transientTask?.cancel()
+		transientMessage = message
+		transientTask = Task { [weak self] in
+			try? await Task.sleep(for: .seconds(1.4))
+			guard Task.isCancelled == false else { return }
+			self?.transientMessage = nil
+		}
 	}
 
 	// MARK: Inspect
@@ -392,6 +417,7 @@ public final class DeveloperOverlayModel {
 		pageURL = ""
 		pageTitle = ""
 		pageViewport = nil
+		pageThemeColor = nil
 		if clear {
 			consoleEntries.removeAll()
 			networkEntries.removeAll()
@@ -404,6 +430,9 @@ public final class DeveloperOverlayModel {
 		pageURL = payload.url
 		pageTitle = payload.title
 		pageViewport = payload.viewport
+		if pageThemeColor != payload.themeColor {
+			pageThemeColor = payload.themeColor
+		}
 		if isPicking != payload.isPicking {
 			isPicking = payload.isPicking
 		}

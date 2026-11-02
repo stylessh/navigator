@@ -34,6 +34,8 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 	public var url: String
 	public var title: String
 	public var viewport: Viewport?
+	/// CSS color string for the page's accent (`rgb(...)`), when it has one.
+	public var themeColor: String?
 
 	private enum CodingKeys: String, CodingKey {
 		case revision = "rev"
@@ -44,6 +46,7 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 		case url
 		case title
 		case viewport
+		case themeColor = "theme"
 	}
 
 	public init(from decoder: Decoder) throws {
@@ -56,6 +59,7 @@ public struct DeveloperOverlayPayload: Equatable, Sendable, Decodable {
 		url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
 		title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
 		viewport = try container.decodeIfPresent(Viewport.self, forKey: .viewport)
+		themeColor = try container.decodeIfPresent(String.self, forKey: .themeColor)
 	}
 
 	public enum PollResult: Equatable, Sendable {

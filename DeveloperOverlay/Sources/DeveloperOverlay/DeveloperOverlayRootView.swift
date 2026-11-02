@@ -30,6 +30,18 @@ struct DeveloperOverlayRootView: View {
 						hud
 							.developerHitRegion("hud")
 
+						if let message = model.transientMessage {
+							Label(message, systemImage: "checkmark.circle.fill")
+								.font(.system(size: 11.5, weight: .medium))
+								.symbolRenderingMode(.multicolor)
+								.padding(.horizontal, 12)
+								.frame(height: 28)
+								.developerGlass(in: Capsule())
+								.developerGlassID("toast", in: glassNamespace)
+								.transition(.scale(scale: 0.6, anchor: .top).combined(with: .opacity))
+								.allowsHitTesting(false)
+						}
+
 						if isViewportShelfPresented {
 							DeveloperViewportShelf(model: model) {
 								withAnimation(DeveloperMotion.morph) { isViewportShelfPresented = false }
@@ -44,7 +56,7 @@ struct DeveloperOverlayRootView: View {
 							DeveloperPanelView(model: model)
 								.frame(width: 420)
 								.frame(maxHeight: .infinity)
-								.developerGlass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+									.developerGlass(in: RoundedRectangle(cornerRadius: 22, style: .continuous), tint: themeTint)
 								.developerGlassID("panel", in: glassNamespace)
 								.developerHitRegion("panel")
 								.transition(
@@ -75,9 +87,19 @@ struct DeveloperOverlayRootView: View {
 		}
 		.coordinateSpace(name: Self.coordinateSpaceName)
 		.environment(\.developerHitRegions, hitRegions)
+		.environment(\.developerCopy, DeveloperCopyAction { [model] text, label in
+			model.copy(text, label: label)
+		})
 		.animation(DeveloperMotion.morph, value: model.isPanelPresented)
 		.animation(DeveloperMotion.morph, value: model.isEnabled)
 		.animation(DeveloperMotion.morph, value: model.viewportMode)
+		.animation(DeveloperMotion.morph, value: model.transientMessage)
+		.animation(.easeInOut(duration: 0.6), value: model.pageThemeColor)
+	}
+
+	/// Like Arc's per-site chrome: a whisper of the page's own color in the glass. Grays don't tint.
+	private var themeTint: Color? {
+		model.pageThemeColor.flatMap(DeveloperFormat.tint(fromCSS:))
 	}
 
 	private var hud: some View {
@@ -144,7 +166,7 @@ struct DeveloperOverlayRootView: View {
 			}
 		}
 		.padding(4)
-		.developerGlass(in: Capsule(), interactive: true)
+		.developerGlass(in: Capsule(), tint: themeTint, interactive: true)
 		.developerGlassID("hud", in: glassNamespace)
 	}
 
